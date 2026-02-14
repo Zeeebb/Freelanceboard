@@ -228,10 +228,6 @@ function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
           </div>
           <div><Label>Statut</Label><BSelect value={form.status} onChange={e=>set("status",e.target.value)}>{STATUS_FLOW.map(s=><option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}</BSelect></div>
           <div><Label>N° bon de commande</Label><BInput value={form.poNumber} onChange={e=>set("poNumber",e.target.value)} placeholder="PO-2026-001"/></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><Label>Date début</Label><BInput type="date" value={form.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
-            <div><Label>Date fin</Label><BInput type="date" value={form.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
-          </div>
           <div><Label>Couleur</Label><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{JOB_COLORS.map(c=><div key={c} onClick={()=>set("color",c)} style={{width:30,height:30,borderRadius:8,backgroundColor:c,cursor:"pointer",transition:"all 0.1s",border:form.color===c?"3px solid #1A1A1A":"2px solid transparent",boxShadow:form.color===c?DS.shadowSm:"none",transform:form.color===c?"scale(1.15)":"scale(1)"}}/>)}</div></div>
           <div><Label>Notes</Label><BTextarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="Infos complémentaires..."/></div>
         </div>
@@ -322,7 +318,7 @@ function YearCalendar({year,entries,jobs,onNavigateYear,onGoToMonth}){
 }
 
 /* ─── PAINT TOOLBAR ────────────────────────────────────────── */
-function PaintToolbar({jobs,activeJobId,setActiveJobId,paintPeriod,setPaintPeriod}){
+function PaintToolbar({jobs,activeJobId,setActiveJobId,paintPeriod,setPaintPeriod,onFillMonth,onClearMonth}){
   const[expanded,setExpanded]=useState(true);if(!jobs.length)return null;
   const aj=jobs.filter(j=>["confirmed","active","prospect"].includes(j.status));const dj=aj.length>0?aj:jobs;
   return <BCard style={{padding:14,marginBottom:14}}>
@@ -345,6 +341,10 @@ function PaintToolbar({jobs,activeJobId,setActiveJobId,paintPeriod,setPaintPerio
         {[["full","Journée",Sun_],["am","Matin",Sun_],["pm","Aprem",Moon_]].map(([p,l,Ic])=>
           <BBtn key={p} small onClick={()=>setPaintPeriod(p)} color={paintPeriod===p?DS.accent:DS.card} style={{fontSize:11,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Ic size={12} sw={2.5}/> {l}</span></BBtn>
         )}
+        <div style={{marginLeft:"auto",display:"flex",gap:5}}>
+          <BBtn small onClick={onFillMonth} color={DS.blue} style={{fontSize:10,padding:"4px 10px",color:"white"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={11} sw={2.5}/> Remplir le mois</span></BBtn>
+          <BBtn small onClick={onClearMonth} style={{fontSize:10,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Trash2 size={11} sw={2.5}/> Vider</span></BBtn>
+        </div>
       </div>}
     </>}
   </BCard>;
@@ -383,84 +383,46 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
   const[selectedYear,setSelectedYear]=useState(curYear);
 
   const cd=(id)=>entries.filter(e=>e.jobId===id).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
-  const cdForMonth=(id,y,m)=>entries.filter(e=>{
-    if(e.jobId!==id)return false;
-    const p=e.date.split("-");return parseInt(p[0],10)===y&&parseInt(p[1],10)-1===m;
-  }).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
   const ct=(j)=>j.type==="fixed"?j.fixedAmount:j.dailyRate*cd(j.id);
   const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
 
-  /* Pour chaque job, trouver les {year,month} où il a des entries */
-  const jobMonths=useMemo(()=>{
-    const map={};// jobId -> Set of "YYYY-MM"
+  /* Première date d'entrée d'un job → détermine son mois unique de rattachement */
+  const jobFirstEntry=useMemo(()=>{
+    const map={};
     entries.forEach(e=>{
       if(!e.date||!e.jobId)return;
-      const p=e.date.split("-");if(p.length<2)return;
-      const key=e.jobId;
-      if(!map[key])map[key]=new Set();
-      map[key].add(p[0]+"-"+p[1]);
+      if(!map[e.jobId]||e.date<map[e.jobId])map[e.jobId]=e.date;
     });
     return map;
   },[entries]);
 
-  /* Fallback : année/mois si aucune entry */
-  const fallbackYM=(j)=>{
-    const d=j.startDate||j.createdAt||"";
+  const getJobYM=(j)=>{
+    const d=jobFirstEntry[j.id]||j.createdAt||"";
     if(d){const p=d.split("-");if(p.length>=2)return{y:parseInt(p[0],10),m:parseInt(p[1],10)-1}}
     return{y:curYear,m:new Date().getMonth()};
   };
 
-  /* Toutes les années où il y a des données */
   const years=useMemo(()=>{
     const s=new Set();s.add(curYear);
-    jobs.forEach(j=>{
-      const ms=jobMonths[j.id];
-      if(ms&&ms.size>0){ms.forEach(ym=>{s.add(parseInt(ym.split("-")[0],10))})}
-      else{s.add(fallbackYM(j).y)}
-    });
+    jobs.forEach(j=>s.add(getJobYM(j).y));
     return[...s].sort((a,b)=>b-a);
-  },[jobs,jobMonths]);
+  },[jobs,jobFirstEntry]);
 
-  /* Filtrage par statut + recherche */
   const matchesFilter=(j)=>{
     if(filter!=="all"&&j.status!==filter)return false;
     if(search&&!j.name.toLowerCase().includes(search.toLowerCase())&&!(j.client||"").toLowerCase().includes(search.toLowerCase()))return false;
     return true;
   };
 
-  /* Construire le groupement : pour chaque mois de l'année sélectionnée, lister les jobs qui y ont des entries */
   const grouped=useMemo(()=>{
-    const months={};// monthIdx -> [jobs]
-    const placed=new Set();// track jobs placed at least once
-
+    const months={};
     jobs.forEach(j=>{
       if(!matchesFilter(j))return;
-      const ms=jobMonths[j.id];
-      if(ms&&ms.size>0){
-        ms.forEach(ym=>{
-          const[yStr,mStr]=ym.split("-");
-          const y=parseInt(yStr,10),m=parseInt(mStr,10)-1;
-          if(y===selectedYear){
-            if(!months[m])months[m]=[];
-            // Éviter les doublons (même job déjà dans ce mois)
-            if(!months[m].some(x=>x.id===j.id)){months[m].push(j);placed.add(j.id)}
-          }
-        });
-      }
+      const ym=getJobYM(j);
+      if(ym.y!==selectedYear)return;
+      if(!months[ym.m])months[ym.m]=[];
+      months[ym.m].push(j);
     });
-
-    // Jobs sans entries → fallback
-    jobs.forEach(j=>{
-      if(!matchesFilter(j))return;
-      if(placed.has(j.id))return;
-      const fb=fallbackYM(j);
-      if(fb.y===selectedYear){
-        if(!months[fb.m])months[fb.m]=[];
-        months[fb.m].push(j);
-      }
-    });
-
-    // Trier mois décroissant, jobs par statut dans chaque mois
     const sorted=Object.entries(months).sort(([a],[b])=>Number(b)-Number(a));
     const statusOrder=STATUS_FLOW.map(s=>s.key);
     sorted.forEach(([,arr])=>arr.sort((a,b)=>{
@@ -468,27 +430,13 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
       return new Date(b.createdAt||0)-new Date(a.createdAt||0);
     }));
     return sorted;
-  },[jobs,entries,jobMonths,selectedYear,filter,search]);
+  },[jobs,entries,jobFirstEntry,selectedYear,filter,search]);
 
-  /* Comptes pour les filtres */
-  const yearJobIds=useMemo(()=>{
-    const ids=new Set();
-    jobs.forEach(j=>{
-      const ms=jobMonths[j.id];
-      if(ms&&ms.size>0){ms.forEach(ym=>{if(parseInt(ym.split("-")[0],10)===selectedYear)ids.add(j.id)})}
-      else if(fallbackYM(j).y===selectedYear)ids.add(j.id);
-    });
-    return ids;
-  },[jobs,jobMonths,selectedYear]);
-  const yearJobs=jobs.filter(j=>yearJobIds.has(j.id));
-
-  /* Total CA année (sans doublons) */
+  const yearJobs=jobs.filter(j=>getJobYM(j).y===selectedYear);
   const yearTotal=yearJobs.filter(j=>matchesFilter(j)).reduce((s,j)=>s+te(ct(j),j.currency),0);
 
   return <div>
     <SectionTitle icon={Briefcase} right={<BBtn onClick={onAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Nouveau job</span></BBtn>}>Mes Jobs</SectionTitle>
-
-    {/* Toolbar : année + recherche + filtres */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
       <BSelect value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={{width:"auto",padding:"8px 32px 8px 12px",fontSize:13,fontFamily:"'Space Mono', monospace",fontWeight:700}}>
         {years.map(y=><option key={y} value={y}>{y}</option>)}
@@ -496,34 +444,24 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
       <div style={{position:"relative",flex:1,maxWidth:220}}><Search size={14} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:DS.textLight}}/><BInput value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{paddingLeft:34}}/></div>
       {yearTotal>0&&<div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,padding:"6px 12px",borderRadius:8,backgroundColor:DS.accent+"20",border:`1.5px solid ${DS.accent}`,color:DS.accentDk}}>{formatMoney(yearTotal,"EUR")}</div>}
     </div>
-
-    {/* Filtres par statut */}
     <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:14}}>
       <BBtn small onClick={()=>setFilter("all")} color={filter==="all"?DS.text:DS.card} style={{color:filter==="all"?DS.card:DS.text,fontSize:11}}>Tous ({yearJobs.length})</BBtn>
       {STATUS_FLOW.map(s=>{const c=yearJobs.filter(j=>j.status===s.key).length;if(!c)return null;return <BBtn key={s.key} small onClick={()=>setFilter(s.key)} color={filter===s.key?s.color:DS.card} style={{fontSize:11,color:filter===s.key?"#1A1A1A":DS.textMid}}>{s.label} ({c})</BBtn>})}
     </div>
-
-    {/* Jobs groupés par mois */}
     <div style={{display:"flex",flexDirection:"column",gap:6}}>
       {!grouped.length&&<BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Briefcase size={40} sw={1.5} color={DS.textLight}/></div><div style={{fontSize:14,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{filter!=="all"?"Aucun job avec ce statut":search?"Aucun résultat":"Aucun job en "+selectedYear+" — c'est le moment d'en créer un !"}</div></BCard>}
       {grouped.map(([monthIdx,monthJobs])=>{
         const mi=Number(monthIdx);
-        const monthTotal=monthJobs.reduce((s,j)=>{
-          // Pour le total du mois : si daily, compter seulement les jours de CE mois
-          if(j.type==="daily"){const d=cdForMonth(j.id,selectedYear,mi);return s+te(j.dailyRate*d,j.currency)}
-          return s+te(j.fixedAmount,j.currency);
-        },0);
+        const monthTotal=monthJobs.reduce((s,j)=>s+te(ct(j),j.currency),0);
         return <div key={monthIdx}>
-          {/* Séparateur mois */}
           <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 0 8px",padding:"0 4px"}}>
             <div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:800,color:DS.text,textTransform:"uppercase",letterSpacing:"0.05em"}}>{MONTHS_FR[mi]}</div>
             <div style={{flex:1,height:2,backgroundColor:DS.text,opacity:0.15,borderRadius:1}}/>
             <div style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,color:DS.textMid}}>{monthJobs.length} job{monthJobs.length>1?"s":""}</div>
             {monthTotal>0&&<div style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,color:DS.accentDk}}>{formatMoney(monthTotal,"EUR")}</div>}
           </div>
-          {/* Job cards du mois */}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {monthJobs.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id+"-"+mi} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
+            {monthJobs.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
           </div>
         </div>;
       })}
@@ -799,7 +737,29 @@ function FreelanceBoard(){
             {["month","year"].map(m=><BBtn key={m} small onClick={()=>setCalendarMode(m)} color={calendarMode===m?DS.accent:DS.card} style={{fontSize:11}}>{m==="month"?"Mois":"Année"}</BBtn>)}
             <BBtn small onClick={()=>{setCurrentMonth(new Date().getMonth());setCurrentYear(new Date().getFullYear())}} style={{fontSize:10}}>Aujourd'hui</BBtn>
           </div>}>Calendrier</SectionTitle>
-          {calendarMode==="month"&&<PaintToolbar jobs={jobs} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod}/>}
+          {calendarMode==="month"&&<PaintToolbar jobs={jobs} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod} onFillMonth={()=>{
+            if(!activeJobId)return;
+            const daysInMonth=new Date(currentYear,currentMonth+1,0).getDate();
+            setEntries(prev=>{
+              let next=[...prev];
+              for(let d=1;d<=daysInMonth;d++){
+                const dow=new Date(currentYear,currentMonth,d).getDay();
+                if(dow===0||dow===6)continue;// skip weekends
+                const date=formatDate(currentYear,currentMonth,d);
+                // Remove existing entries for this date+job
+                next=next.filter(e=>!(e.date===date&&e.jobId===activeJobId));
+                // Remove conflicting full-day entries from other jobs if painting full
+                if(paintPeriod==="full")next=next.filter(e=>!(e.date===date&&e.period==="full"));
+                else next=next.filter(e=>!(e.date===date&&e.period===paintPeriod));
+                next.push({date,jobId:activeJobId,period:paintPeriod});
+              }
+              return next;
+            });
+          }} onClearMonth={()=>{
+            if(!activeJobId)return;
+            const pfx=`${currentYear}-${String(currentMonth+1).padStart(2,"0")}`;
+            setEntries(prev=>prev.filter(e=>!(e.jobId===activeJobId&&e.date.startsWith(pfx))));
+          }}/>}
           <BCard style={{padding:16}}>
             {calendarMode==="month"?<MonthCalendar year={currentYear} month={currentMonth} entries={entries} jobs={jobs} activeJobId={activeJobId} paintPeriod={paintPeriod} onToggleDay={toggleDay} onNavigate={(dir)=>{let m=currentMonth+dir,y=currentYear;if(m<0){m=11;y--}if(m>11){m=0;y++}setCurrentMonth(m);setCurrentYear(y)}}/>
             :<YearCalendar year={currentYear} entries={entries} jobs={jobs} onNavigateYear={(d)=>setCurrentYear(y=>y+d)} onGoToMonth={(m)=>{setCurrentMonth(m);setCalendarMode("month")}}/>}
