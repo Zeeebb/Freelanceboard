@@ -1,825 +1,526 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>FreelanceBoard</title>
-  <meta name="description" content="Outil de suivi freelance pour artiste-auteur" />
-  <meta name="theme-color" content="#F2E8D5" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='90' height='90' x='5' y='5' rx='12' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='6'/><rect width='40' height='10' x='20' y='30' rx='3' fill='%23B8E62E'/><rect width='55' height='10' x='20' y='50' rx='3' fill='%23FFD23F'/><rect width='30' height='10' x='20' y='70' rx='3' fill='%235EBCF1'/></svg>" />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <meta name="description" content="Outil de suivi freelance pour artiste-auteur"/>
+  <meta name="theme-color" content="#F2E8D5"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='90' height='90' x='5' y='5' rx='12' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='6'/><rect width='40' height='10' x='20' y='30' rx='3' fill='%23B8E62E'/><rect width='55' height='10' x='20' y='50' rx='3' fill='%23FFD23F'/><rect width='30' height='10' x='20' y='70' rx='3' fill='%235EBCF1'/></svg>"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
   <style>
-    * { box-sizing: border-box; margin: 0; }
-    body { background: #F2E8D5; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #FAF4E8; }
-    ::-webkit-scrollbar-thumb { background: #9B8E7E; border-radius: 3px; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @media(max-width:768px) { .dsb { display: none !important; } .mnv { display: flex !important; } }
-    @media(min-width:769px) { .dsb { display: flex !important; } .mnv { display: none !important; } }
+    *{box-sizing:border-box;margin:0}body{background:#F2E8D5}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#FAF4E8}::-webkit-scrollbar-thumb{background:#9B8E7E;border-radius:3px}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    @media(max-width:768px){.dsb{display:none!important}.mnv{display:flex!important}}
+    @media(min-width:769px){.dsb{display:flex!important}.mnv{display:none!important}}
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/lucide-react@0.263.1/dist/umd/lucide-react.js"></script>
+  <script type="text/babel">
+/* ═══════════════════════════════════════════════════════════════
+   FreelanceBoard — Standalone Build for GitHub Pages
+   ═══════════════════════════════════════════════════════════════ */
+const {useState,useEffect,useCallback,useMemo,useRef} = React;
 
-  <script type="text/babel" data-type="module">
-    const { useState, useEffect, useCallback, useMemo, useRef } = React;
-    const {
-      Calendar, Briefcase, BarChart3, Settings, Plus, Edit3, Trash2, Copy,
-      ChevronLeft, ChevronRight, Check, X, DollarSign, Clock, Users,
-      Palette, FileText, Download, Sun, Moon, Filter, Search, ArrowRight,
-      CircleDot, AlertCircle, Zap, Eye, EyeOff, GripVertical, RefreshCw,
-      ChevronsUpDown, Layers, PaintBucket, ChevronDown, ExternalLink, Info
-    } = lucideReact;
+/* ─── SVG ICON FACTORY (replaces lucide-react) ──────────────── */
+function Ico({d,size=24,sw=2,style,...p}){
+  return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"
+    style={{display:"inline-block",verticalAlign:"middle",flexShrink:0,...style}} {...p}>
+    {d.map((seg,i)=>{
+      if(typeof seg==="string") return <path key={i} d={seg}/>;
+      if(seg.c) return <circle key={i} cx={seg.c[0]} cy={seg.c[1]} r={seg.c[2]}/>;
+      if(seg.r) return <rect key={i} x={seg.r[0]} y={seg.r[1]} width={seg.r[2]} height={seg.r[3]} rx={seg.r[4]||0}/>;
+      if(seg.l) return <line key={i} x1={seg.l[0]} y1={seg.l[1]} x2={seg.l[2]} y2={seg.l[3]}/>;
+      if(seg.p) return <polyline key={i} points={seg.p}/>;
+      return null;
+    })}
+  </svg>;
+}
+const mkI=(d)=>(props)=><Ico d={d} {...props}/>;
 
-    /* ════════════════════════════════════════════════════════════
-       DESIGN SYSTEM — Neo-Brutalist / Warm Retro
-       ════════════════════════════════════════════════════════════ */
+const Calendar=mkI([{r:[3,4,18,18,2]},"M16 2v4","M8 2v4",{l:[3,10,21,10]}]);
+const Briefcase=mkI([{r:[2,7,20,14,2]},"M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"]);
+const BarChart3=mkI([{l:[12,20,12,10]},{l:[18,20,18,4]},{l:[6,20,6,16]}]);
+const Settings=mkI(["M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z",{c:[12,12,3]}]);
+const Plus=mkI([{l:[12,5,12,19]},{l:[5,12,19,12]}]);
+const Edit3=mkI(["M12 20h9","M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"]);
+const Trash2=mkI(["M3 6h18","M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6",{l:[8,6,8,2]},{l:[16,6,16,2]},{l:[10,11,10,17]},{l:[14,11,14,17]}]);
+const Copy_=mkI([{r:[9,9,13,13,2]},"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"]);
+const ChevronLeft=mkI(["M15 18l-6-6 6-6"]);
+const ChevronRight=mkI(["M9 18l6-6-6-6"]);
+const ChevronDown=mkI(["M6 9l6 6 6-6"]);
+const Check=mkI(["M20 6L9 17l-5-5"]);
+const X_=mkI([{l:[18,6,6,18]},{l:[6,6,18,18]}]);
+const DollarSign=mkI([{l:[12,2,12,22]},"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"]);
+const Clock=mkI([{c:[12,12,10]},"M12 6v6l4 2"]);
+const Users=mkI(["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",{c:[9,7,4]},"M22 21v-2a4 4 0 0 0-3-3.87","M16 3.13a4 4 0 0 1 0 7.75"]);
+const FileText=mkI(["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z","M14 2v6h6",{l:[16,13,8,13]},{l:[16,17,8,17]},{l:[10,9,8,9]}]);
+const Sun_=mkI([{c:[12,12,5]},"M12 1v2","M12 21v2","M4.22 4.22l1.42 1.42","M18.36 18.36l1.42 1.42","M1 12h2","M21 12h2","M4.22 19.78l1.42-1.42","M18.36 5.64l1.42-1.42"]);
+const Moon_=mkI(["M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"]);
+const Search=mkI([{c:[11,11,8]},"M21 21l-4.35-4.35"]);
+const ArrowRight=mkI([{l:[5,12,19,12]},"M12 5l7 7-7 7"]);
+const CircleDot=mkI([{c:[12,12,10]},{c:[12,12,1]}]);
+const Zap=mkI(["M13 2L3 14h9l-1 8 10-12h-9l1-8"]);
+const Eye_=mkI(["M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z",{c:[12,12,3]}]);
+const RefreshCw=mkI(["M23 4v6h-6","M1 20v-6h6","M3.51 9a9 9 0 0 1 14.85-3.36L23 10","M1 14l4.64 4.36A9 9 0 0 0 20.49 15"]);
+const Layers=mkI(["M12 2L2 7l10 5 10-5-10-5z","M2 17l10 5 10-5","M2 12l10 5 10-5"]);
+const PaintBucket=mkI(["M19 11l-8-8-8.6 8.6a2 2 0 0 0 0 2.83l5.66 5.66a2 2 0 0 0 2.83 0L19 12.1","M5 2l5 5",{c:[20,18.5,1.5]}]);
+const Filter=mkI(["M22 3H2l8 9.46V19l4 2v-8.54L22 3"]);
 
-    const DS = {
-      bg:       "#F2E8D5",
-      bgLight:  "#FAF4E8",
-      card:     "#FFFBF2",
-      border:   "#1A1A1A",
-      text:     "#1A1A1A",
-      textMid:  "#5C5347",
-      textLight:"#9B8E7E",
-      accent:   "#B8E62E",
-      accentDk: "#8FBF10",
-      orange:   "#FF7A3D",
-      yellow:   "#FFD23F",
-      pink:     "#FF8FAB",
-      blue:     "#5EBCF1",
-      purple:   "#C49BFF",
-      red:      "#FF6B57",
-      shadow:   "4px 4px 0px #1A1A1A",
-      shadowSm: "3px 3px 0px #1A1A1A",
-      shadowLg: "6px 6px 0px #1A1A1A",
-      radius:   12,
-      border2:  "2.5px solid #1A1A1A",
-    };
+/* ─── DESIGN SYSTEM ────────────────────────────────────────── */
+const DS={bg:"#F2E8D5",bgLight:"#FAF4E8",card:"#FFFBF2",border:"#1A1A1A",text:"#1A1A1A",textMid:"#5C5347",textLight:"#9B8E7E",accent:"#B8E62E",accentDk:"#8FBF10",orange:"#FF7A3D",yellow:"#FFD23F",pink:"#FF8FAB",blue:"#5EBCF1",purple:"#C49BFF",red:"#FF6B57",shadow:"4px 4px 0px #1A1A1A",shadowSm:"3px 3px 0px #1A1A1A",shadowLg:"6px 6px 0px #1A1A1A",radius:12,border2:"2.5px solid #1A1A1A"};
+const btnBase={border:DS.border2,borderRadius:DS.radius,boxShadow:DS.shadow,fontFamily:"'Space Mono', monospace",fontWeight:700,cursor:"pointer",transition:"all 0.1s ease",position:"relative",userSelect:"none"};
 
-    const btnBase = {
-      border: DS.border2,
-      borderRadius: DS.radius,
-      boxShadow: DS.shadow,
-      fontFamily: "'Space Mono', monospace",
-      fontWeight: 700,
-      cursor: "pointer",
-      transition: "all 0.1s ease",
-      position: "relative",
-      userSelect: "none",
-    };
+function BBtn({children,onClick,style,disabled,small,color,...rest}){
+  const[pressed,setPressed]=useState(false);const[hovered,setHovered]=useState(false);
+  return <button onClick={onClick} disabled={disabled}
+    onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setPressed(false)}}
+    onMouseDown={()=>setPressed(true)} onMouseUp={()=>setPressed(false)}
+    onTouchStart={()=>setPressed(true)} onTouchEnd={()=>setPressed(false)}
+    style={{...btnBase,padding:small?"6px 12px":"10px 18px",fontSize:small?11:13,backgroundColor:color||DS.card,color:DS.text,opacity:disabled?0.5:1,...(hovered&&!pressed?{transform:"translate(-1px,-1px)",boxShadow:"5px 5px 0px #1A1A1A"}:{}),...(pressed?{transform:"translate(3px,3px)",boxShadow:"0px 0px 0px #1A1A1A"}:{}),...style}} {...rest}>{children}</button>;
+}
+function BCard({children,style,accent,onClick}){
+  return <div onClick={onClick} style={{backgroundColor:DS.card,border:DS.border2,borderRadius:DS.radius,boxShadow:DS.shadow,...(accent?{borderLeft:`6px solid ${accent}`}:{}),...(onClick?{cursor:"pointer"}:{}),...style}}>{children}</div>;
+}
+function BInput({style,...p}){return <input {...p} style={{width:"100%",padding:"10px 14px",border:DS.border2,borderRadius:8,fontSize:13,fontFamily:"'DM Sans', sans-serif",backgroundColor:DS.card,color:DS.text,outline:"none",boxShadow:"2px 2px 0px #1A1A1A",...style}}/>}
+function BSelect({style,children,...p}){return <select {...p} style={{width:"100%",padding:"10px 14px",border:DS.border2,borderRadius:8,fontSize:13,fontFamily:"'DM Sans', sans-serif",backgroundColor:DS.card,color:DS.text,outline:"none",boxShadow:"2px 2px 0px #1A1A1A",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1A1A' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center",paddingRight:36,...style}}>{children}</select>}
+function BTextarea({style,...p}){return <textarea {...p} style={{width:"100%",padding:"10px 14px",border:DS.border2,borderRadius:8,fontSize:13,fontFamily:"'DM Sans', sans-serif",backgroundColor:DS.card,color:DS.text,outline:"none",boxShadow:"2px 2px 0px #1A1A1A",resize:"none",...style}}/>}
+function Label({children}){return <label style={{display:"block",fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:"0.08em",color:DS.textMid,marginBottom:5,fontFamily:"'Space Mono', monospace"}}>{children}</label>}
+function SectionTitle({children,icon:Icon,right}){
+  return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:12}}>
+    <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:22,fontWeight:700,color:DS.text,margin:0,display:"flex",alignItems:"center",gap:10}}>{Icon&&<Icon size={22} sw={2.5}/>}{children}</h2>
+    {right&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>{right}</div>}
+  </div>;
+}
 
-    function BBtn({ children, onClick, style, disabled, className = "", small, color, ...rest }) {
-      const [pressed, setPressed] = useState(false);
-      const [hovered, setHovered] = useState(false);
-      const bg = color || DS.card;
-      return (
-        <button onClick={onClick} disabled={disabled}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => { setHovered(false); setPressed(false); }}
-          onMouseDown={() => setPressed(true)}
-          onMouseUp={() => setPressed(false)}
-          onTouchStart={() => setPressed(true)}
-          onTouchEnd={() => setPressed(false)}
-          className={className}
-          style={{
-            ...btnBase,
-            padding: small ? "6px 12px" : "10px 18px",
-            fontSize: small ? 11 : 13,
-            backgroundColor: bg,
-            color: DS.text,
-            opacity: disabled ? 0.5 : 1,
-            ...(hovered && !pressed ? { transform: "translate(-1px, -1px)", boxShadow: "5px 5px 0px #1A1A1A" } : {}),
-            ...(pressed ? { transform: "translate(3px, 3px)", boxShadow: "0px 0px 0px #1A1A1A" } : {}),
-            ...style,
-          }} {...rest}>{children}</button>
-      );
-    }
+/* ─── CONSTANTS ────────────────────────────────────────────── */
+const JOB_COLORS=["#FF7A3D","#FFD23F","#B8E62E","#5EBCF1","#C49BFF","#FF8FAB","#FF6B57","#8FBF10","#3DCCB4","#F2994A","#7B61FF","#E86F5A","#56CCF2","#F2C94C","#BB6BD9"];
+const STATUS_FLOW=[{key:"prospect",label:"Prospect",icon:"\u25CB",color:"#9B8E7E"},{key:"confirmed",label:"Confirm\u00e9",icon:"\u25C9",color:"#5EBCF1"},{key:"active",label:"En cours",icon:"\u25B6",color:"#FFD23F"},{key:"done",label:"Termin\u00e9",icon:"\u25A0",color:"#C49BFF"},{key:"invoiced",label:"Factur\u00e9",icon:"\u25C8",color:"#FF7A3D"},{key:"paid",label:"Pay\u00e9",icon:"\u2713",color:"#B8E62E"}];
+const CURRENCIES=["EUR","USD","GBP","CAD","CHF","JPY","AUD","SEK","NOK","DKK"];
+const DAYS_FR=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+const MONTHS_FR=["Janvier","F\u00e9vrier","Mars","Avril","Mai","Juin","Juillet","Ao\u00fbt","Septembre","Octobre","Novembre","D\u00e9cembre"];
+const MONTHS_SHORT=["Jan","F\u00e9v","Mar","Avr","Mai","Jun","Jul","Ao\u00fb","Sep","Oct","Nov","D\u00e9c"];
 
-    function BCard({ children, style, className = "", accent, onClick }) {
-      return (
-        <div onClick={onClick} className={className} style={{
-          backgroundColor: DS.card, border: DS.border2, borderRadius: DS.radius, boxShadow: DS.shadow,
-          ...(accent ? { borderLeft: `6px solid ${accent}` } : {}),
-          ...(onClick ? { cursor: "pointer" } : {}),
-          ...style,
-        }}>{children}</div>
-      );
-    }
+/* ─── HELPERS ──────────────────────────────────────────────── */
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const getDaysInMonth=(y,m)=>new Date(y,m+1,0).getDate();
+const getFirstDayOfMonth=(y,m)=>{const d=new Date(y,m,1).getDay();return d===0?6:d-1};
+const formatDate=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+const parseDate=(s)=>{const[y,m,d]=s.split("-").map(Number);return{year:y,month:m-1,day:d}};
+const formatMoney=(a,c="EUR")=>{try{return new Intl.NumberFormat("fr-FR",{style:"currency",currency:c}).format(a)}catch{return`${a.toFixed(2)} ${c}`}};
+const isWeekend=(y,m,d)=>{const x=new Date(y,m,d).getDay();return x===0||x===6};
+const FALLBACK_RATES={USD:0.92,GBP:1.17,CAD:0.68,CHF:1.05,JPY:0.0062,AUD:0.60,SEK:0.088,NOK:0.086,DKK:0.134,EUR:1};
 
-    function BInput({ style, ...props }) {
-      return <input {...props} style={{
-        width: "100%", padding: "10px 14px", border: DS.border2, borderRadius: 8,
-        fontSize: 13, fontFamily: "'DM Sans', sans-serif", backgroundColor: DS.card,
-        color: DS.text, outline: "none", boxShadow: "2px 2px 0px #1A1A1A", ...style,
-      }} />;
-    }
+/* ─── STORAGE (localStorage) ───────────────────────────────── */
+const storage={
+  load(k,f){try{const r=localStorage.getItem(`fb_${k}`);return r?JSON.parse(r):f}catch{return f}},
+  save(k,d){try{localStorage.setItem(`fb_${k}`,JSON.stringify(d))}catch(e){console.warn("save err",e)}}
+};
 
-    function BSelect({ style, children, ...props }) {
-      return <select {...props} style={{
-        width: "100%", padding: "10px 14px", border: DS.border2, borderRadius: 8,
-        fontSize: 13, fontFamily: "'DM Sans', sans-serif", backgroundColor: DS.card,
-        color: DS.text, outline: "none", boxShadow: "2px 2px 0px #1A1A1A", appearance: "none",
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231A1A1A' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-        backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 36, ...style,
-      }}>{children}</select>;
-    }
-
-    function BTextarea({ style, ...props }) {
-      return <textarea {...props} style={{
-        width: "100%", padding: "10px 14px", border: DS.border2, borderRadius: 8,
-        fontSize: 13, fontFamily: "'DM Sans', sans-serif", backgroundColor: DS.card,
-        color: DS.text, outline: "none", boxShadow: "2px 2px 0px #1A1A1A", resize: "none", ...style,
-      }} />;
-    }
-
-    function Label({ children }) {
-      return <label style={{
-        display: "block", fontSize: 10, fontWeight: 800, textTransform: "uppercase",
-        letterSpacing: "0.08em", color: DS.textMid, marginBottom: 5, fontFamily: "'Space Mono', monospace",
-      }}>{children}</label>;
-    }
-
-    function SectionTitle({ children, icon: Icon, right }) {
-      return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-          <h2 style={{ fontFamily: "'Space Mono', monospace", fontSize: 22, fontWeight: 700, color: DS.text, margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
-            {Icon && <Icon size={22} strokeWidth={2.5}/>}{children}
-          </h2>
-          {right && <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>{right}</div>}
+/* ─── JOB FORM ─────────────────────────────────────────────── */
+function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
+  const isEdit=!!job?.id;
+  const[form,setForm]=useState(()=>({name:"",client:"",contact:"",type:"daily",dailyRate:"",fixedAmount:"",currency:"EUR",status:"prospect",color:JOB_COLORS[jobs.length%JOB_COLORS.length],poNumber:"",notes:"",startDate:"",endDate:"",...job}));
+  const[showClients,setShowClients]=useState(false);
+  const filteredClients=useMemo(()=>!form.client?clients:clients.filter(c=>c.toLowerCase().includes(form.client.toLowerCase())),[form.client,clients]);
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const handleSave=()=>{if(!form.name.trim())return;onSave({...form,id:form.id||uid(),dailyRate:parseFloat(form.dailyRate)||0,fixedAmount:parseFloat(form.fixedAmount)||0,createdAt:form.createdAt||new Date().toISOString()})};
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",backgroundColor:"rgba(26,26,26,0.4)",padding:16}}>
+      <BCard style={{width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"auto"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 20px",borderBottom:DS.border2}}>
+          <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:16,fontWeight:700,margin:0,display:"flex",alignItems:"center",gap:8}}>{isEdit?<><Edit3 size={16} sw={2.5}/> Modifier le job</>:<><Plus size={16} sw={2.5}/> Nouveau job</>}</h2>
+          <BBtn small onClick={onClose} style={{padding:"4px 8px"}}><X_ size={16}/></BBtn>
         </div>
-      );
-    }
-
-    // ─── CONSTANTS ────────────────────────────────────────────────
-    const JOB_COLORS = ["#FF7A3D","#FFD23F","#B8E62E","#5EBCF1","#C49BFF","#FF8FAB","#FF6B57","#8FBF10","#3DCCB4","#F2994A","#7B61FF","#E86F5A","#56CCF2","#F2C94C","#BB6BD9"];
-    const STATUS_FLOW = [
-      { key: "prospect", label: "Prospect", icon: "\u25CB", color: "#9B8E7E" },
-      { key: "confirmed", label: "Confirm\u00E9", icon: "\u25C9", color: "#5EBCF1" },
-      { key: "active", label: "En cours", icon: "\u25B6", color: "#FFD23F" },
-      { key: "done", label: "Termin\u00E9", icon: "\u25A0", color: "#C49BFF" },
-      { key: "invoiced", label: "Factur\u00E9", icon: "\u25C8", color: "#FF7A3D" },
-      { key: "paid", label: "Pay\u00E9", icon: "\u2713", color: "#B8E62E" },
-    ];
-    const CURRENCIES = ["EUR","USD","GBP","CAD","CHF","JPY","AUD","SEK","NOK","DKK"];
-    const DAYS_FR = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-    const MONTHS_FR = ["Janvier","F\u00E9vrier","Mars","Avril","Mai","Juin","Juillet","Ao\u00FBt","Septembre","Octobre","Novembre","D\u00E9cembre"];
-    const MONTHS_SHORT = ["Jan","F\u00E9v","Mar","Avr","Mai","Jun","Jul","Ao\u00FB","Sep","Oct","Nov","D\u00E9c"];
-
-    // ─── HELPERS ──────────────────────────────────────────────────
-    const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    const getDaysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
-    const getFirstDayOfMonth = (y, m) => { const d = new Date(y, m, 1).getDay(); return d === 0 ? 6 : d - 1; };
-    const formatDate = (y, m, d) => `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    const parseDate = (s) => { const [y,m,d] = s.split("-").map(Number); return {year:y,month:m-1,day:d}; };
-    const formatMoney = (a, c="EUR") => { try { return new Intl.NumberFormat("fr-FR",{style:"currency",currency:c}).format(a); } catch { return `${a.toFixed(2)} ${c}`; } };
-    const isWeekend = (y, m, d) => { const x = new Date(y, m, d).getDay(); return x === 0 || x === 6; };
-    const FALLBACK_RATES = {USD:0.92,GBP:1.17,CAD:0.68,CHF:1.05,JPY:0.0062,AUD:0.60,SEK:0.088,NOK:0.086,DKK:0.134,EUR:1};
-
-    // ─── STORAGE (localStorage) ───────────────────────────────────
-    const storage = {
-      load(k, fallback) {
-        try {
-          const raw = localStorage.getItem(`fb_${k}`);
-          return raw ? JSON.parse(raw) : fallback;
-        } catch { return fallback; }
-      },
-      save(k, data) {
-        try { localStorage.setItem(`fb_${k}`, JSON.stringify(data)); }
-        catch (e) { console.warn("Storage save failed:", e); }
-      },
-    };
-
-    // ─── JOB FORM ─────────────────────────────────────────────────
-    function JobForm({ job, jobs, onSave, onClose, onDelete, clients }) {
-      const isEdit = !!job?.id;
-      const [form, setForm] = useState(() => ({
-        name:"",client:"",contact:"",type:"daily",dailyRate:"",fixedAmount:"",currency:"EUR",
-        status:"prospect",color:JOB_COLORS[jobs.length%JOB_COLORS.length],poNumber:"",notes:"",startDate:"",endDate:"",...job,
-      }));
-      const [showClients, setShowClients] = useState(false);
-      const filteredClients = useMemo(() => !form.client ? clients : clients.filter(c => c.toLowerCase().includes(form.client.toLowerCase())), [form.client, clients]);
-      const set = (k,v) => setForm(f=>({...f,[k]:v}));
-      const handleSave = () => {
-        if (!form.name.trim()) return;
-        onSave({...form, id:form.id||uid(), dailyRate:parseFloat(form.dailyRate)||0, fixedAmount:parseFloat(form.fixedAmount)||0, createdAt:form.createdAt||new Date().toISOString()});
-      };
-
-      return (
-        <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",backgroundColor:"rgba(26,26,26,0.4)",padding:16}}>
-          <BCard style={{width:"100%",maxWidth:520,maxHeight:"90vh",overflow:"auto"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 20px",borderBottom:DS.border2}}>
-              <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:16,fontWeight:700,margin:0,display:"flex",alignItems:"center",gap:8}}>{isEdit?<><Edit3 size={16} strokeWidth={2.5}/> Modifier le job</>:<><Plus size={16} strokeWidth={2.5}/> Nouveau job</>}</h2>
-              <BBtn small onClick={onClose} style={{padding:"4px 8px"}}><X size={16}/></BBtn>
+        <div style={{padding:20,display:"flex",flexDirection:"column",gap:14}}>
+          <div><Label>Nom du job *</Label><BInput value={form.name} onChange={e=>set("name",e.target.value)} placeholder="Ex: Character Design"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div style={{position:"relative"}}>
+              <Label>Client / Studio</Label>
+              <BInput value={form.client} onChange={e=>{set("client",e.target.value);setShowClients(true)}} onFocus={()=>setShowClients(true)} onBlur={()=>setTimeout(()=>setShowClients(false),200)} placeholder="Studio Ghibli"/>
+              {showClients&&filteredClients.length>0&&<div style={{position:"absolute",zIndex:10,width:"100%",marginTop:4,backgroundColor:DS.card,border:DS.border2,borderRadius:8,boxShadow:DS.shadowSm,maxHeight:120,overflow:"auto"}}>
+                {filteredClients.map(c=><div key={c} onMouseDown={()=>{set("client",c);setShowClients(false)}} style={{padding:"8px 12px",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans', sans-serif"}} onMouseEnter={e=>e.target.style.backgroundColor=DS.accent+"40"} onMouseLeave={e=>e.target.style.backgroundColor="transparent"}>{c}</div>)}
+              </div>}
             </div>
-            <div style={{padding:20,display:"flex",flexDirection:"column",gap:14}}>
-              <div><Label>Nom du job *</Label><BInput value={form.name} onChange={e=>set("name",e.target.value)} placeholder="Ex: Character Design"/></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div style={{position:"relative"}}>
-                  <Label>Client / Studio</Label>
-                  <BInput value={form.client} onChange={e=>{set("client",e.target.value);setShowClients(true);}} onFocus={()=>setShowClients(true)} onBlur={()=>setTimeout(()=>setShowClients(false),200)} placeholder="Studio Ghibli"/>
-                  {showClients && filteredClients.length > 0 && (
-                    <div style={{position:"absolute",zIndex:10,width:"100%",marginTop:4,backgroundColor:DS.card,border:DS.border2,borderRadius:8,boxShadow:DS.shadowSm,maxHeight:120,overflow:"auto"}}>
-                      {filteredClients.map(c=>(
-                        <div key={c} onMouseDown={()=>{set("client",c);setShowClients(false);}} style={{padding:"8px 12px",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans', sans-serif"}}
-                          onMouseEnter={e=>e.target.style.backgroundColor=DS.accent+"40"} onMouseLeave={e=>e.target.style.backgroundColor="transparent"}>{c}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div><Label>Contact</Label><BInput value={form.contact} onChange={e=>set("contact",e.target.value)} placeholder="Nom du contact"/></div>
-              </div>
-              <div>
-                <Label>Type de tarification</Label>
-                <div style={{display:"flex",gap:8}}>
-                  <BBtn small onClick={()=>set("type","daily")} color={form.type==="daily"?DS.accent:DS.card} style={{flex:1,textAlign:"center",fontSize:12}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><Calendar size={13} strokeWidth={2.5}/> Journalier</span></BBtn>
-                  <BBtn small onClick={()=>set("type","fixed")} color={form.type==="fixed"?DS.accent:DS.card} style={{flex:1,textAlign:"center",fontSize:12}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><Layers size={13} strokeWidth={2.5}/> Forfait</span></BBtn>
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {form.type==="daily"
-                  ? <div><Label>Tarif journalier</Label><BInput type="number" value={form.dailyRate} onChange={e=>set("dailyRate",e.target.value)} placeholder="350"/></div>
-                  : <div><Label>Montant forfait</Label><BInput type="number" value={form.fixedAmount} onChange={e=>set("fixedAmount",e.target.value)} placeholder="1500"/></div>}
-                <div><Label>Devise</Label><BSelect value={form.currency} onChange={e=>set("currency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</BSelect></div>
-              </div>
-              <div><Label>Statut</Label><BSelect value={form.status} onChange={e=>set("status",e.target.value)}>{STATUS_FLOW.map(s=><option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}</BSelect></div>
-              <div><Label>N bon de commande</Label><BInput value={form.poNumber} onChange={e=>set("poNumber",e.target.value)} placeholder="PO-2026-001"/></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div><Label>Date debut</Label><BInput type="date" value={form.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
-                <div><Label>Date fin</Label><BInput type="date" value={form.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
-              </div>
-              <div>
-                <Label>Couleur</Label>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {JOB_COLORS.map(c=>(
-                    <div key={c} onClick={()=>set("color",c)} style={{
-                      width:30,height:30,borderRadius:8,backgroundColor:c,cursor:"pointer",transition:"all 0.1s",
-                      border:form.color===c?"3px solid #1A1A1A":"2px solid transparent",
-                      boxShadow:form.color===c?DS.shadowSm:"none",
-                      transform:form.color===c?"scale(1.15)":"scale(1)",
-                    }}/>
-                  ))}
-                </div>
-              </div>
-              <div><Label>Notes</Label><BTextarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="Infos complementaires..."/></div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderTop:DS.border2,background:DS.bgLight}}>
-              <div>{isEdit && <BBtn small onClick={()=>{if(confirm("Supprimer ce job et tous ses jours ?"))onDelete(job.id);}} color="#FF6B57" style={{color:"white"}}><span style={{display:"flex",alignItems:"center",gap:6}}><Trash2 size={13}/> Supprimer</span></BBtn>}</div>
-              <div style={{display:"flex",gap:8}}>
-                <BBtn small onClick={onClose}>Annuler</BBtn>
-                <BBtn small onClick={handleSave} color={form.name.trim()?DS.accent:"#ddd"} style={{fontWeight:800}}><span style={{display:"flex",alignItems:"center",gap:5}}>{isEdit?<><Check size={13} strokeWidth={3}/> Enregistrer</>:<>Creer le job <ArrowRight size={13} strokeWidth={3}/></>}</span></BBtn>
-              </div>
-            </div>
-          </BCard>
-        </div>
-      );
-    }
-
-    // ─── DAY CELL ─────────────────────────────────────────────────
-    function DayCell({ day, isToday, weekend, hasFull, amJob, pmJob, hasJob, activeJobId, jobs, onClick }) {
-      const [hovered, setHovered] = useState(false);
-      const activeJob = activeJobId ? jobs.find(j => j.id === activeJobId) : null;
-      return (
-        <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
-          style={{
-            aspectRatio:"1", minHeight:48, borderRadius:8,
-            border: isToday ? `3px solid ${DS.accent}` : hasJob ? DS.border2 : `2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
-            backgroundColor: hasJob ? DS.card : weekend ? "#EDE7D9" : DS.bgLight,
-            boxShadow: hasJob ? DS.shadowSm : "none",
-            position:"relative", cursor: activeJobId ? "pointer" : "default",
-            transition:"all 0.1s", transform: hovered && activeJobId ? "translate(-1px,-1px)" : "none", overflow:"hidden",
-          }}>
-          <div style={{position:"absolute",top:3,left:6,fontSize:11,fontWeight:800,color:isToday?DS.accentDk:weekend?DS.textLight:DS.textMid,fontFamily:"'Space Mono', monospace"}}>{day}</div>
-          {hasFull && amJob && <div style={{position:"absolute",inset:0,top:20,margin:3,borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
-          {!hasFull && amJob && <div style={{position:"absolute",left:3,right:3,top:20,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
-          {!hasFull && pmJob && <div style={{position:"absolute",left:3,right:3,bottom:3,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:pmJob.color,opacity:0.35}}/>}
-          {hasJob && (
-            <div style={{position:"absolute",bottom:4,right:5,display:"flex",gap:2}}>
-              {amJob && <div style={{width:6,height:6,borderRadius:"50%",backgroundColor:amJob.color,border:"1.5px solid #1A1A1A"}}/>}
-              {pmJob && pmJob !== amJob && <div style={{width:6,height:6,borderRadius:"50%",backgroundColor:pmJob.color,border:"1.5px solid #1A1A1A"}}/>}
-            </div>
-          )}
-          {hovered && activeJobId && !hasJob && activeJob && <div style={{position:"absolute",inset:0,backgroundColor:activeJob.color,opacity:0.15,borderRadius:6}}/>}
-        </div>
-      );
-    }
-
-    // ─── MONTH CALENDAR ───────────────────────────────────────────
-    function MonthCalendar({ year, month, entries, jobs, activeJobId, paintPeriod, onToggleDay, onNavigate }) {
-      const daysInMonth = getDaysInMonth(year, month);
-      const firstDay = getFirstDayOfMonth(year, month);
-      const today = new Date();
-      const isTodayFn = (d) => today.getFullYear()===year && today.getMonth()===month && today.getDate()===d;
-      const getEntriesForDay = (day) => entries.filter(e => e.date===formatDate(year,month,day));
-      const getJobById = (id) => jobs.find(j => j.id===id);
-      const cells = [];
-      for (let i=0;i<firstDay;i++) cells.push(null);
-      for (let d=1;d<=daysInMonth;d++) cells.push(d);
-
-      return (
-        <div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <BBtn small onClick={()=>onNavigate(-1)}><ChevronLeft size={18}/></BBtn>
-            <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700,margin:0}}>{MONTHS_FR[month]} {year}</h2>
-            <BBtn small onClick={()=>onNavigate(1)}><ChevronRight size={18}/></BBtn>
+            <div><Label>Contact</Label><BInput value={form.contact} onChange={e=>set("contact",e.target.value)} placeholder="Nom du contact"/></div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
-            {DAYS_FR.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:800,color:DS.textLight,textTransform:"uppercase",letterSpacing:"0.08em",padding:"8px 0",fontFamily:"'Space Mono', monospace"}}>{d}</div>)}
+          <div><Label>Type de tarification</Label>
+            <div style={{display:"flex",gap:8}}>
+              <BBtn small onClick={()=>set("type","daily")} color={form.type==="daily"?DS.accent:DS.card} style={{flex:1,textAlign:"center",fontSize:12}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><Calendar size={13} sw={2.5}/> Journalier</span></BBtn>
+              <BBtn small onClick={()=>set("type","fixed")} color={form.type==="fixed"?DS.accent:DS.card} style={{flex:1,textAlign:"center",fontSize:12}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><Layers size={13} sw={2.5}/> Forfait</span></BBtn>
+            </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-            {cells.map((day,idx) => {
-              if (!day) return <div key={`e-${idx}`} style={{aspectRatio:"1"}}/>;
-              const dayEntries = getEntriesForDay(day);
-              const hasFull = dayEntries.some(e=>e.period==="full");
-              const amEntry = dayEntries.find(e=>e.period==="am"||e.period==="full");
-              const pmEntry = dayEntries.find(e=>e.period==="pm")||(hasFull?amEntry:null);
-              const amJob = amEntry ? getJobById(amEntry.jobId) : null;
-              const pmJob = pmEntry ? getJobById(pmEntry.jobId) : null;
-              return <DayCell key={day} day={day} isToday={isTodayFn(day)} weekend={isWeekend(year,month,day)}
-                hasFull={hasFull} amJob={amJob} pmJob={pmJob} hasJob={!!(amJob||pmJob)}
-                activeJobId={activeJobId} jobs={jobs}
-                onClick={()=>activeJobId && onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}/>;
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {form.type==="daily"?<div><Label>Tarif journalier</Label><BInput type="number" value={form.dailyRate} onChange={e=>set("dailyRate",e.target.value)} placeholder="350"/></div>:<div><Label>Montant forfait</Label><BInput type="number" value={form.fixedAmount} onChange={e=>set("fixedAmount",e.target.value)} placeholder="1500"/></div>}
+            <div><Label>Devise</Label><BSelect value={form.currency} onChange={e=>set("currency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</BSelect></div>
+          </div>
+          <div><Label>Statut</Label><BSelect value={form.status} onChange={e=>set("status",e.target.value)}>{STATUS_FLOW.map(s=><option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}</BSelect></div>
+          <div><Label>N° bon de commande</Label><BInput value={form.poNumber} onChange={e=>set("poNumber",e.target.value)} placeholder="PO-2026-001"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><Label>Date début</Label><BInput type="date" value={form.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
+            <div><Label>Date fin</Label><BInput type="date" value={form.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
+          </div>
+          <div><Label>Couleur</Label><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{JOB_COLORS.map(c=><div key={c} onClick={()=>set("color",c)} style={{width:30,height:30,borderRadius:8,backgroundColor:c,cursor:"pointer",transition:"all 0.1s",border:form.color===c?"3px solid #1A1A1A":"2px solid transparent",boxShadow:form.color===c?DS.shadowSm:"none",transform:form.color===c?"scale(1.15)":"scale(1)"}}/>)}</div></div>
+          <div><Label>Notes</Label><BTextarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="Infos complémentaires..."/></div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderTop:DS.border2,background:DS.bgLight}}>
+          <div>{isEdit&&<BBtn small onClick={()=>{if(confirm("Supprimer ce job ?"))onDelete(job.id)}} color="#FF6B57" style={{color:"white"}}><span style={{display:"flex",alignItems:"center",gap:6}}><Trash2 size={13}/> Supprimer</span></BBtn>}</div>
+          <div style={{display:"flex",gap:8}}>
+            <BBtn small onClick={onClose}>Annuler</BBtn>
+            <BBtn small onClick={handleSave} color={form.name.trim()?DS.accent:"#ddd"} style={{fontWeight:800}}><span style={{display:"flex",alignItems:"center",gap:5}}>{isEdit?<><Check size={13} sw={3}/> Enregistrer</>:<>Créer le job <ArrowRight size={13} sw={3}/></>}</span></BBtn>
+          </div>
+        </div>
+      </BCard>
+    </div>
+  );
+}
+
+/* ─── DAY CELL ─────────────────────────────────────────────── */
+function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,activeJobId,jobs,onClick}){
+  const[hovered,setHovered]=useState(false);const activeJob=activeJobId?jobs.find(j=>j.id===activeJobId):null;
+  return <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} style={{
+    aspectRatio:"1",minHeight:48,borderRadius:8,border:isToday?`3px solid ${DS.accent}`:hasJob?DS.border2:`2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
+    backgroundColor:hasJob?DS.card:weekend?"#EDE7D9":DS.bgLight,boxShadow:hasJob?DS.shadowSm:"none",
+    position:"relative",cursor:activeJobId?"pointer":"default",transition:"all 0.1s",transform:hovered&&activeJobId?"translate(-1px,-1px)":"none",overflow:"hidden"}}>
+    <div style={{position:"absolute",top:3,left:6,fontSize:11,fontWeight:800,color:isToday?DS.accentDk:weekend?DS.textLight:DS.textMid,fontFamily:"'Space Mono', monospace"}}>{day}</div>
+    {hasFull&&amJob&&<div style={{position:"absolute",inset:0,top:20,margin:3,borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
+    {!hasFull&&amJob&&<div style={{position:"absolute",left:3,right:3,top:20,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
+    {!hasFull&&pmJob&&<div style={{position:"absolute",left:3,right:3,bottom:3,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:pmJob.color,opacity:0.35}}/>}
+    {hasJob&&<div style={{position:"absolute",bottom:4,right:5,display:"flex",gap:2}}>
+      {amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:amJob.color,border:"1.5px solid #1A1A1A"}}/>}
+      {pmJob&&pmJob!==amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:pmJob.color,border:"1.5px solid #1A1A1A"}}/>}
+    </div>}
+    {hovered&&activeJobId&&!hasJob&&activeJob&&<div style={{position:"absolute",inset:0,backgroundColor:activeJob.color,opacity:0.15,borderRadius:6}}/>}
+  </div>;
+}
+
+/* ─── MONTH CAL ────────────────────────────────────────────── */
+function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggleDay,onNavigate}){
+  const dim=getDaysInMonth(year,month),fd=getFirstDayOfMonth(year,month),today=new Date();
+  const isT=(d)=>today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
+  const efd=(day)=>entries.filter(e=>e.date===formatDate(year,month,day));
+  const gj=(id)=>jobs.find(j=>j.id===id);
+  const cells=[];for(let i=0;i<fd;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
+  return <div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+      <BBtn small onClick={()=>onNavigate(-1)}><ChevronLeft size={18}/></BBtn>
+      <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700,margin:0}}>{MONTHS_FR[month]} {year}</h2>
+      <BBtn small onClick={()=>onNavigate(1)}><ChevronRight size={18}/></BBtn>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+      {DAYS_FR.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:800,color:DS.textLight,textTransform:"uppercase",letterSpacing:"0.08em",padding:"8px 0",fontFamily:"'Space Mono', monospace"}}>{d}</div>)}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+      {cells.map((day,idx)=>{
+        if(!day)return <div key={`e-${idx}`} style={{aspectRatio:"1"}}/>;
+        const de=efd(day),hf=de.some(e=>e.period==="full"),ae=de.find(e=>e.period==="am"||e.period==="full"),pe=de.find(e=>e.period==="pm")||(hf?ae:null);
+        const aj=ae?gj(ae.jobId):null,pj=pe?gj(pe.jobId):null;
+        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} activeJobId={activeJobId} jobs={jobs} onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}/>;
+      })}
+    </div>
+  </div>;
+}
+
+/* ─── YEAR CAL ─────────────────────────────────────────────── */
+function YearCalendar({year,entries,jobs,onNavigateYear,onGoToMonth}){
+  const gj=(id)=>jobs.find(j=>j.id===id);
+  return <div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+      <BBtn small onClick={()=>onNavigateYear(-1)}><ChevronLeft size={18}/></BBtn>
+      <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:22,fontWeight:700,margin:0}}>{year}</h2>
+      <BBtn small onClick={()=>onNavigateYear(1)}><ChevronRight size={18}/></BBtn>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+      {Array.from({length:12},(_,m)=>{
+        const dim=getDaysInMonth(year,m),fd=getFirstDayOfMonth(year,m),cells=[];
+        for(let i=0;i<fd;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
+        return <BCard key={m} onClick={()=>onGoToMonth(m)} style={{padding:12,cursor:"pointer"}}>
+          <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:8}}>{MONTHS_SHORT[m]}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+            {cells.map((day,idx)=>{
+              if(!day)return <div key={`e-${idx}`} style={{aspectRatio:1}}/>;
+              const de=entries.filter(e=>e.date===formatDate(year,m,day)),mj=de[0]?gj(de[0].jobId):null,we=isWeekend(year,m,day),half=de.length===1&&de[0].period!=="full";
+              return <div key={day} style={{aspectRatio:1,borderRadius:2,backgroundColor:mj?mj.color+(half?"70":"cc"):we?"#E5DFD1":"#EDE7D9",border:mj?"1px solid #1A1A1A40":"none"}}/>;
             })}
           </div>
+        </BCard>;
+      })}
+    </div>
+  </div>;
+}
+
+/* ─── PAINT TOOLBAR ────────────────────────────────────────── */
+function PaintToolbar({jobs,activeJobId,setActiveJobId,paintPeriod,setPaintPeriod}){
+  const[expanded,setExpanded]=useState(true);if(!jobs.length)return null;
+  const aj=jobs.filter(j=>["confirmed","active","prospect"].includes(j.status));const dj=aj.length>0?aj:jobs;
+  return <BCard style={{padding:14,marginBottom:14}}>
+    <div onClick={()=>setExpanded(!expanded)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:expanded?10:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}><PaintBucket size={16} sw={2.5}/>
+        <span style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em"}}>Mode peinture</span>
+        {activeJobId&&<span style={{fontSize:12,color:DS.textMid,fontFamily:"'DM Sans', sans-serif"}}>{"\u2014 "}{jobs.find(j=>j.id===activeJobId)?.name}</span>}
+      </div>
+      <ChevronDown size={14} style={{color:DS.textLight,transition:"transform 0.2s",transform:expanded?"rotate(180deg)":"none"}}/>
+    </div>
+    {expanded&&<>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:activeJobId?10:0}}>
+        {dj.map(j=><BBtn key={j.id} small onClick={()=>setActiveJobId(activeJobId===j.id?null:j.id)} color={activeJobId===j.id?j.color:DS.card} style={{fontSize:11,padding:"5px 10px",color:activeJobId===j.id?"#1A1A1A":DS.textMid}}>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:4,backgroundColor:j.color,border:"1.5px solid #1A1A1A",display:"inline-block"}}/>{j.name}</span>
+        </BBtn>)}
+        {activeJobId&&<BBtn small onClick={()=>setActiveJobId(null)} style={{fontSize:10,padding:"5px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><X_ size={11} sw={3}/> Désélect.</span></BBtn>}
+      </div>
+      {activeJobId&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>Appliquer:</span>
+        {[["full","Journée",Sun_],["am","Matin",Sun_],["pm","Aprem",Moon_]].map(([p,l,Ic])=>
+          <BBtn key={p} small onClick={()=>setPaintPeriod(p)} color={paintPeriod===p?DS.accent:DS.card} style={{fontSize:11,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Ic size={12} sw={2.5}/> {l}</span></BBtn>
+        )}
+      </div>}
+    </>}
+  </BCard>;
+}
+
+/* ─── JOB CARD ─────────────────────────────────────────────── */
+function JobCard({job,days,total,eurTotal,statusInfo,onEdit,onDuplicate}){
+  const[hovered,setHovered]=useState(false);const[pressed,setPressed]=useState(false);
+  return <div onClick={()=>onEdit(job)} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setPressed(false)}} onMouseDown={()=>setPressed(true)} onMouseUp={()=>setPressed(false)} style={{
+    display:"flex",alignItems:"center",gap:14,padding:16,backgroundColor:DS.card,border:DS.border2,borderLeft:`6px solid ${job.color}`,borderRadius:DS.radius,
+    boxShadow:pressed?"0px 0px 0px #1A1A1A":hovered?DS.shadowLg:DS.shadow,cursor:"pointer",transition:"all 0.1s",transform:pressed?"translate(3px,3px)":hovered?"translate(-1px,-1px)":"none"}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+        <span style={{fontFamily:"'Space Mono', monospace",fontWeight:700,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.name}</span>
+        <span style={{padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:800,backgroundColor:statusInfo.color+"30",color:statusInfo.color,border:`1.5px solid ${statusInfo.color}`,fontFamily:"'Space Mono', monospace",textTransform:"uppercase"}}>{statusInfo.label}</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12,fontSize:12,color:DS.textMid,fontFamily:"'DM Sans', sans-serif",flexWrap:"wrap"}}>
+        {job.client&&<span style={{display:"flex",alignItems:"center",gap:3}}><Users size={12} sw={2.5}/> {job.client}</span>}
+        {job.type==="daily"&&<span style={{display:"flex",alignItems:"center",gap:3}}><Clock size={12} sw={2.5}/> {days}j × {formatMoney(job.dailyRate,job.currency)}</span>}
+        {job.type==="fixed"&&<span style={{display:"flex",alignItems:"center",gap:3}}><Layers size={12} sw={2.5}/> Forfait</span>}
+        {job.poNumber&&<span style={{color:DS.textLight}}>#{job.poNumber}</span>}
+      </div>
+    </div>
+    <div style={{textAlign:"right",flexShrink:0}}>
+      <div style={{fontFamily:"'Space Mono', monospace",fontWeight:700,fontSize:15}}>{formatMoney(total,job.currency)}</div>
+      {job.currency!=="EUR"&&total>0&&<div style={{fontSize:11,color:DS.textLight}}>≈ {formatMoney(eurTotal,"EUR")}</div>}
+    </div>
+    {hovered&&<div onClick={e=>{e.stopPropagation();onDuplicate(job)}} style={{padding:6,borderRadius:6,backgroundColor:DS.bgLight,border:"1.5px solid #1A1A1A",cursor:"pointer"}}><Copy_ size={13}/></div>}
+  </div>;
+}
+
+/* ─── JOBS LIST ────────────────────────────────────────────── */
+function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
+  const[filter,setFilter]=useState("all");const[search,setSearch]=useState("");
+  const cd=(id)=>entries.filter(e=>e.jobId===id).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
+  const ct=(j)=>j.type==="fixed"?j.fixedAmount:j.dailyRate*cd(j.id);
+  const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
+  const fl=jobs.filter(j=>{if(filter!=="all"&&j.status!==filter)return false;if(search&&!j.name.toLowerCase().includes(search.toLowerCase())&&!(j.client||"").toLowerCase().includes(search.toLowerCase()))return false;return true});
+  const so=[...fl].sort((a,b)=>{const o=STATUS_FLOW.map(s=>s.key);if(o.indexOf(a.status)!==o.indexOf(b.status))return o.indexOf(a.status)-o.indexOf(b.status);return new Date(b.createdAt||0)-new Date(a.createdAt||0)});
+  return <div>
+    <SectionTitle icon={Briefcase} right={<BBtn onClick={onAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Nouveau job</span></BBtn>}>Mes Jobs</SectionTitle>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+      <div style={{position:"relative",flex:1,maxWidth:260}}><Search size={14} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:DS.textLight}}/><BInput value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{paddingLeft:34}}/></div>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        <BBtn small onClick={()=>setFilter("all")} color={filter==="all"?DS.text:DS.card} style={{color:filter==="all"?DS.card:DS.text,fontSize:11}}>Tous ({jobs.length})</BBtn>
+        {STATUS_FLOW.map(s=>{const c=jobs.filter(j=>j.status===s.key).length;if(!c)return null;return <BBtn key={s.key} small onClick={()=>setFilter(s.key)} color={filter===s.key?s.color:DS.card} style={{fontSize:11,color:filter===s.key?"#1A1A1A":DS.textMid}}>{s.label} ({c})</BBtn>})}
+      </div>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {!so.length&&<BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Briefcase size={40} sw={1.5} color={DS.textLight}/></div><div style={{fontSize:14,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{filter!=="all"?"Aucun job avec ce statut":"Aucun job \u2014 c'est le moment d'en créer un !"}</div></BCard>}
+      {so.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
+    </div>
+  </div>;
+}
+
+/* ─── SUMMARY ──────────────────────────────────────────────── */
+function SummaryView({jobs,entries,rates,year}){
+  const[period,setPeriod]=useState("year");const[periodMonth,setPeriodMonth]=useState(new Date().getMonth());
+  const cd=(id,df)=>{let f=entries.filter(e=>e.jobId===id);if(df)f=f.filter(df);return f.reduce((s,e)=>s+(e.period==="full"?1:0.5),0)};
+  const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
+  const df=period==="month"?(e)=>{const d=parseDate(e.date);return d.year===year&&d.month===periodMonth}:(e)=>{const d=parseDate(e.date);return d.year===year};
+  const jm=(j)=>{if(j.type==="daily")return cd(j.id,df)>0;if(period==="year")return j.startDate?.startsWith(String(year))||j.endDate?.startsWith(String(year))||(!j.startDate&&!j.endDate);const pfx=`${year}-${String(periodMonth+1).padStart(2,"0")}`;return j.startDate?.startsWith(pfx)||j.endDate?.startsWith(pfx)||(!j.startDate&&!j.endDate)};
+  const aj=jobs.filter(jm);const ga=(j)=>j.type==="fixed"?j.fixedAmount:j.dailyRate*cd(j.id,df);const gae=(j)=>te(ga(j),j.currency);
+  const BK=[{key:"cashed",label:"Encaissé",statuses:["paid"],color:DS.accent,Icon:DollarSign},{key:"done",label:"Réalisé",statuses:["done","invoiced"],color:DS.orange,Icon:FileText},{key:"ongoing",label:"En cours",statuses:["active"],color:DS.yellow,Icon:Zap},{key:"confirmed",label:"Confirmé",statuses:["confirmed"],color:DS.blue,Icon:CircleDot},{key:"prospect",label:"Prospect",statuses:["prospect"],color:"#C4BAA8",Icon:Eye_}];
+  const bd=BK.map(b=>({...b,jobs:aj.filter(j=>b.statuses.includes(j.status)),total:aj.filter(j=>b.statuses.includes(j.status)).reduce((s,j)=>s+gae(j),0)})).filter(b=>b.jobs.length>0);
+  const tC=bd.find(b=>b.key==="cashed")?.total||0,tD=bd.find(b=>b.key==="done")?.total||0,tO=bd.find(b=>b.key==="ongoing")?.total||0,tCf=bd.find(b=>b.key==="confirmed")?.total||0,tP=bd.find(b=>b.key==="prospect")?.total||0;
+  const caR=tC+tD,caS=caR+tO+tCf,caT=caS+tP;
+  const rS=["paid","invoiced","done","active","confirmed"],tDR=aj.filter(j=>rS.includes(j.status)).reduce((s,j)=>s+cd(j.id,df),0);
+  const wD=(()=>{let c=0;if(period==="month"){const d=getDaysInMonth(year,periodMonth);for(let i=1;i<=d;i++)if(!isWeekend(year,periodMonth,i))c++}else{for(let m=0;m<12;m++){const d=getDaysInMonth(year,m);for(let i=1;i<=d;i++)if(!isWeekend(year,m,i))c++}}return c})();
+  const occ=wD>0?Math.round((tDR/wD)*100):0,maxB=Math.max(...bd.map(b=>b.total),1);
+  return <div>
+    <SectionTitle icon={BarChart3} right={<div style={{display:"flex",alignItems:"center",gap:6}}>
+      {["month","year"].map(p=><BBtn key={p} small onClick={()=>setPeriod(p)} color={period===p?DS.accent:DS.card} style={{fontSize:11}}>{p==="month"?"Mois":"Année"}</BBtn>)}
+      {period==="month"&&<BSelect value={periodMonth} onChange={e=>setPeriodMonth(Number(e.target.value))} style={{width:"auto",padding:"6px 30px 6px 10px",fontSize:12}}>{MONTHS_FR.map((m,i)=><option key={i} value={i}>{m}</option>)}</BSelect>}
+    </div>}>Résumé</SectionTitle>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10,marginBottom:12}}>
+      <BCard style={{padding:18,borderLeft:`6px solid ${DS.accent}`,background:`linear-gradient(135deg,${DS.accent}15 0%,${DS.card} 100%)`}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><DollarSign size={16} sw={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.accentDk}}>CA Réalisé</span></div>
+        <div style={{fontFamily:"'Space Mono', monospace",fontSize:26,fontWeight:700}}>{formatMoney(caR,"EUR")}</div>
+        <div style={{fontSize:11,color:DS.textLight,marginTop:2}}>Travail effectué</div>
+      </BCard>
+      <BCard style={{padding:18,borderLeft:`6px solid ${DS.blue}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><CircleDot size={16} sw={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.blue}}>CA Sécurisé</span></div>
+        <div style={{fontFamily:"'Space Mono', monospace",fontSize:26,fontWeight:700}}>{formatMoney(caS,"EUR")}</div>
+        <div style={{fontSize:11,color:DS.textLight,marginTop:2}}>Réalisé + confirmé</div>
+      </BCard>
+      <BCard style={{padding:18,borderLeft:"6px solid #C4BAA8"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><Eye_ size={16} sw={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#9B8E7E"}}>Pipeline</span></div>
+        <div style={{fontFamily:"'Space Mono', monospace",fontSize:26,fontWeight:700,color:DS.textLight}}>{formatMoney(caT,"EUR")}</div>
+        <div style={{fontSize:11,color:DS.textLight,marginTop:2}}>Tout inclus</div>
+      </BCard>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+      <BCard style={{padding:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:9,fontWeight:800,textTransform:"uppercase",color:DS.textLight,marginBottom:4}}>Jours</div><div style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700}}>{tDR}<span style={{fontSize:12,color:DS.textLight}}>/{wD}</span></div></BCard>
+      <BCard style={{padding:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:9,fontWeight:800,textTransform:"uppercase",color:DS.textLight,marginBottom:4}}>Occupation</div><div style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700,color:occ>80?DS.accent:occ>50?DS.yellow:DS.textLight}}>{occ}%</div></BCard>
+      <BCard style={{padding:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:9,fontWeight:800,textTransform:"uppercase",color:DS.textLight,marginBottom:4}}>TJM moyen</div><div style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700}}>{tDR>0?formatMoney(caR/tDR,"EUR"):"\u2014"}</div></BCard>
+    </div>
+    {bd.length>0&&<BCard style={{padding:18,marginBottom:16}}>
+      <div style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textMid,marginBottom:14}}>Répartition par statut</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {bd.map(b=><div key={b.key}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <span style={{fontSize:12,fontWeight:600,color:b.key==="prospect"?DS.textLight:DS.text,display:"flex",alignItems:"center",gap:6}}><b.Icon size={14} sw={2.5}/> {b.label} <span style={{fontSize:10,color:DS.textLight}}>({b.jobs.length})</span></span>
+          <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,color:b.key==="prospect"?DS.textLight:DS.text}}>{formatMoney(b.total,"EUR")}</span>
+        </div><div style={{width:"100%",height:14,backgroundColor:DS.bgLight,borderRadius:4,border:"1.5px solid #1A1A1A",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,width:`${Math.max((b.total/maxB)*100,b.total>0?3:0)}%`,backgroundColor:b.color,opacity:b.key==="prospect"?0.4:1,transition:"width 0.5s ease"}}/></div></div>)}
+      </div>
+      {caT>0&&<div style={{marginTop:14,paddingTop:14,borderTop:`2px dashed ${DS.textLight}40`}}>
+        <div style={{width:"100%",height:20,borderRadius:6,border:DS.border2,overflow:"hidden",display:"flex",boxShadow:DS.shadowSm}}>
+          {bd.map(b=><div key={b.key} style={{height:"100%",backgroundColor:b.color,width:`${(b.total/caT)*100}%`,opacity:b.key==="prospect"?0.35:0.85}} title={`${b.label}: ${formatMoney(b.total,"EUR")}`}/>)}
         </div>
-      );
-    }
-
-    // ─── YEAR CALENDAR ────────────────────────────────────────────
-    function YearCalendar({ year, entries, jobs, onNavigateYear, onGoToMonth }) {
-      const getJobById = (id) => jobs.find(j=>j.id===id);
-      return (
-        <div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-            <BBtn small onClick={()=>onNavigateYear(-1)}><ChevronLeft size={18}/></BBtn>
-            <h2 style={{fontFamily:"'Space Mono', monospace",fontSize:22,fontWeight:700,margin:0}}>{year}</h2>
-            <BBtn small onClick={()=>onNavigateYear(1)}><ChevronRight size={18}/></BBtn>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
-            {Array.from({length:12},(_,m)=>{
-              const dim=getDaysInMonth(year,m); const fd=getFirstDayOfMonth(year,m);
-              const cells=[]; for(let i=0;i<fd;i++) cells.push(null); for(let d=1;d<=dim;d++) cells.push(d);
-              return (
-                <BCard key={m} onClick={()=>onGoToMonth(m)} style={{padding:12,cursor:"pointer"}}>
-                  <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:8,color:DS.text}}>{MONTHS_SHORT[m]}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-                    {cells.map((day,idx)=>{
-                      if(!day) return <div key={`e-${idx}`} style={{aspectRatio:1}}/>;
-                      const dateStr=formatDate(year,m,day);
-                      const dayE=entries.filter(e=>e.date===dateStr);
-                      const mj=dayE[0]?getJobById(dayE[0].jobId):null;
-                      const we=isWeekend(year,m,day);
-                      const half=dayE.length===1&&dayE[0].period!=="full";
-                      return <div key={day} style={{aspectRatio:1,borderRadius:2,backgroundColor:mj?mj.color+(half?"70":"cc"):we?"#E5DFD1":"#EDE7D9",border:mj?"1px solid #1A1A1A40":"none"}}/>;
-                    })}
-                  </div>
-                </BCard>
-              );
-            })}
-          </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:8}}>{bd.map(b=><div key={b.key} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,backgroundColor:b.color,border:"1px solid #1A1A1A",opacity:b.key==="prospect"?0.4:1}}/><span style={{fontSize:10,color:DS.textMid}}>{b.label}</span></div>)}</div>
+      </div>}
+    </BCard>}
+    <BCard style={{overflow:"hidden"}}>
+      <div style={{padding:"14px 18px",borderBottom:DS.border2,backgroundColor:DS.bgLight}}><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textMid}}>Détail par job</span></div>
+      {!aj.length?<div style={{padding:40,textAlign:"center"}}><div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><BarChart3 size={32} sw={1.5} color={DS.textLight}/></div><div style={{fontSize:13,color:DS.textLight}}>Aucun job sur cette période</div></div>:<div>
+        {BK.filter(b=>aj.some(j=>b.statuses.includes(j.status))).map(bk=>{
+          const bJ=aj.filter(j=>bk.statuses.includes(j.status)),bT=bJ.reduce((s,j)=>s+gae(j),0),isP=bk.key==="prospect";
+          return <div key={bk.key}>
+            <div style={{padding:"8px 18px",backgroundColor:bk.color+"20",borderBottom:`1.5px solid ${bk.color}40`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:bk.color,display:"flex",alignItems:"center",gap:5}}><bk.Icon size={12} sw={2.5}/> {bk.label}</span>
+              <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,color:isP?DS.textLight:DS.text}}>{formatMoney(bT,"EUR")}</span>
+            </div>
+            {bJ.map(job=>{const d=cd(job.id,df),a=ga(job),ae=gae(job);return <div key={job.id} style={{padding:"12px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${DS.bgLight}`,opacity:isP?0.5:1}}>
+              <div style={{width:12,height:12,borderRadius:4,backgroundColor:job.color,border:"1.5px solid #1A1A1A",flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.name}</div><div style={{fontSize:11,color:DS.textMid}}>{job.client&&`${job.client} \u00B7 `}{job.type==="daily"?`${d}j × ${formatMoney(job.dailyRate,job.currency)}`:"Forfait"}</div></div>
+              <div style={{textAlign:"right",flexShrink:0}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:700}}>{formatMoney(a,job.currency)}</div>{job.currency!=="EUR"&&a>0&&<div style={{fontSize:10,color:DS.textLight}}>≈ {formatMoney(ae,"EUR")}</div>}</div>
+            </div>})}
+          </div>;
+        })}
+        <div style={{padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",backgroundColor:DS.accent+"20",borderTop:DS.border2}}>
+          <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",gap:6}}><DollarSign size={14} sw={2.5}/> CA Réalisé</span>
+          <span style={{fontFamily:"'Space Mono', monospace",fontSize:18,fontWeight:800,color:DS.accentDk}}>{formatMoney(caR,"EUR")}</span>
         </div>
-      );
-    }
+      </div>}
+    </BCard>
+  </div>;
+}
 
-    // ─── PAINT TOOLBAR ────────────────────────────────────────────
-    function PaintToolbar({ jobs, activeJobId, setActiveJobId, paintPeriod, setPaintPeriod }) {
-      const [expanded, setExpanded] = useState(true);
-      if (jobs.length===0) return null;
-      const activeJobs = jobs.filter(j=>["confirmed","active","prospect"].includes(j.status));
-      const displayJobs = activeJobs.length>0 ? activeJobs : jobs;
-      return (
-        <BCard style={{padding:14,marginBottom:14}}>
-          <div onClick={()=>setExpanded(!expanded)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:expanded?10:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <PaintBucket size={16} strokeWidth={2.5}/>
-              <span style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em"}}>Mode peinture</span>
-              {activeJobId && <span style={{fontSize:12,color:DS.textMid,fontFamily:"'DM Sans', sans-serif"}}>- {jobs.find(j=>j.id===activeJobId)?.name}</span>}
-            </div>
-            <ChevronDown size={14} style={{color:DS.textLight,transition:"transform 0.2s",transform:expanded?"rotate(180deg)":"none"}}/>
-          </div>
-          {expanded && (
-            <>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:activeJobId?10:0}}>
-                {displayJobs.map(j=>(
-                  <BBtn key={j.id} small onClick={()=>setActiveJobId(activeJobId===j.id?null:j.id)}
-                    color={activeJobId===j.id?j.color:DS.card} style={{fontSize:11,padding:"5px 10px",color:activeJobId===j.id?"#1A1A1A":DS.textMid}}>
-                    <span style={{display:"flex",alignItems:"center",gap:5}}>
-                      <span style={{width:8,height:8,borderRadius:4,backgroundColor:j.color,border:"1.5px solid #1A1A1A",display:"inline-block"}}/>
-                      {j.name}
-                    </span>
-                  </BBtn>
-                ))}
-                {activeJobId && <BBtn small onClick={()=>setActiveJobId(null)} style={{fontSize:10,padding:"5px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><X size={11} strokeWidth={3}/> Deselect.</span></BBtn>}
-              </div>
-              {activeJobId && (
-                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                  <span style={{fontSize:11,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>Appliquer:</span>
-                  {[["full","Journee",Sun],["am","Matin",Sun],["pm","Aprem",Moon]].map(([p,l,Ic])=>(
-                    <BBtn key={p} small onClick={()=>setPaintPeriod(p)} color={paintPeriod===p?DS.accent:DS.card} style={{fontSize:11,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Ic size={12} strokeWidth={2.5}/> {l}</span></BBtn>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </BCard>
-      );
-    }
+/* ─── SETTINGS ─────────────────────────────────────────────── */
+function SettingsView({settings,onSave}){
+  const[form,setForm]=useState(settings);const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  return <div style={{maxWidth:480}}>
+    <SectionTitle icon={Settings}>Réglages</SectionTitle>
+    <BCard style={{padding:20,marginBottom:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:14}}>Valeurs par défaut</div>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div><Label>Devise par défaut</Label><BSelect value={form.defaultCurrency} onChange={e=>set("defaultCurrency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</BSelect></div>
+        <div><Label>Tarif journalier par défaut</Label><BInput type="number" value={form.defaultDailyRate} onChange={e=>set("defaultDailyRate",e.target.value)} placeholder="350"/></div>
+      </div>
+    </BCard>
+    <BCard style={{padding:20,marginBottom:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:6}}>Google Sheets (optionnel)</div>
+      <div style={{fontSize:12,color:DS.textLight,marginBottom:12}}>Connecte un Apps Script pour sync en ligne.</div>
+      <div><Label>URL de l'Apps Script</Label><BInput value={form.apiUrl||""} onChange={e=>set("apiUrl",e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></div>
+    </BCard>
+    <BBtn onClick={()=>onSave(form)} color={DS.accent} style={{width:"100%",textAlign:"center",fontSize:14,padding:"14px 0"}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Check size={16} sw={3}/> Sauvegarder</span></BBtn>
+  </div>;
+}
 
-    // ─── JOB CARD ─────────────────────────────────────────────────
-    function JobCard({ job, days, total, eurTotal, statusInfo, onEdit, onDuplicate }) {
-      const [hovered,setHovered] = useState(false);
-      const [pressed,setPressed] = useState(false);
-      return (
-        <div onClick={()=>onEdit(job)} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setPressed(false);}} onMouseDown={()=>setPressed(true)} onMouseUp={()=>setPressed(false)}
-          style={{
-            display:"flex",alignItems:"center",gap:14,padding:16,backgroundColor:DS.card,border:DS.border2,
-            borderLeft:`6px solid ${job.color}`,borderRadius:DS.radius,
-            boxShadow:pressed?"0px 0px 0px #1A1A1A":hovered?DS.shadowLg:DS.shadow,
-            cursor:"pointer",transition:"all 0.1s",
-            transform:pressed?"translate(3px,3px)":hovered?"translate(-1px,-1px)":"none",
-          }}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-              <span style={{fontFamily:"'Space Mono', monospace",fontWeight:700,fontSize:14,color:DS.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.name}</span>
-              <span style={{padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:800,backgroundColor:statusInfo.color+"30",color:statusInfo.color,border:`1.5px solid ${statusInfo.color}`,fontFamily:"'Space Mono', monospace",textTransform:"uppercase"}}>{statusInfo.label}</span>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:12,fontSize:12,color:DS.textMid,fontFamily:"'DM Sans', sans-serif",flexWrap:"wrap"}}>
-              {job.client && <span style={{display:"flex",alignItems:"center",gap:3}}><Users size={12} strokeWidth={2.5}/> {job.client}</span>}
-              {job.type==="daily" && <span style={{display:"flex",alignItems:"center",gap:3}}><Clock size={12} strokeWidth={2.5}/> {days}j x {formatMoney(job.dailyRate,job.currency)}</span>}
-              {job.type==="fixed" && <span style={{display:"flex",alignItems:"center",gap:3}}><Layers size={12} strokeWidth={2.5}/> Forfait</span>}
-              {job.poNumber && <span style={{color:DS.textLight}}>#{job.poNumber}</span>}
-            </div>
-          </div>
-          <div style={{textAlign:"right",flexShrink:0}}>
-            <div style={{fontFamily:"'Space Mono', monospace",fontWeight:700,fontSize:15,color:DS.text}}>{formatMoney(total,job.currency)}</div>
-            {job.currency!=="EUR" && total>0 && <div style={{fontSize:11,color:DS.textLight}}>~ {formatMoney(eurTotal,"EUR")}</div>}
-          </div>
-          {hovered && <div onClick={e=>{e.stopPropagation();onDuplicate(job);}} style={{padding:6,borderRadius:6,backgroundColor:DS.bgLight,border:"1.5px solid #1A1A1A",cursor:"pointer"}}><Copy size={13}/></div>}
-        </div>
-      );
-    }
+/* ─── NAV BTN ──────────────────────────────────────────────── */
+function NavBtn({item,active,collapsed,onClick,mobile}){
+  const[hovered,setHovered]=useState(false);const[pressed,setPressed]=useState(false);
+  return <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setPressed(false)}} onMouseDown={()=>setPressed(true)} onMouseUp={()=>setPressed(false)} style={{
+    display:"flex",alignItems:"center",gap:10,padding:mobile?"6px 10px":collapsed?"10px":"10px 14px",borderRadius:10,
+    border:active?DS.border2:"2.5px solid transparent",backgroundColor:active?DS.accent:hovered?DS.bgLight:"transparent",
+    boxShadow:active?(pressed?"0 0 0 #1A1A1A":DS.shadowSm):"none",transform:pressed&&active?"translate(2px,2px)":"none",
+    cursor:"pointer",transition:"all 0.1s",fontFamily:"'Space Mono', monospace",fontSize:mobile?16:12,fontWeight:700,
+    color:active?DS.text:DS.textMid,justifyContent:collapsed?"center":"flex-start"}}>
+    <span style={{display:"flex",alignItems:"center"}}><item.icon size={mobile?18:16} sw={2.5}/></span>
+    {!collapsed&&!mobile&&item.label}
+  </div>;
+}
 
-    // ─── JOBS LIST ────────────────────────────────────────────────
-    function JobsList({ jobs, entries, rates, onEdit, onDuplicate, onAdd }) {
-      const [filter,setFilter] = useState("all");
-      const [search,setSearch] = useState("");
-      const calcDays = (id) => entries.filter(e=>e.jobId===id).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
-      const calcTotal = (j) => j.type==="fixed"?j.fixedAmount:j.dailyRate*calcDays(j.id);
-      const toEur = (a,c) => c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
-      const filtered = jobs.filter(j=>{
-        if(filter!=="all"&&j.status!==filter) return false;
-        if(search && !j.name.toLowerCase().includes(search.toLowerCase()) && !(j.client||"").toLowerCase().includes(search.toLowerCase())) return false;
-        return true;
-      });
-      const sorted = [...filtered].sort((a,b)=>{
-        const o = STATUS_FLOW.map(s=>s.key);
-        if(o.indexOf(a.status)!==o.indexOf(b.status)) return o.indexOf(a.status)-o.indexOf(b.status);
-        return new Date(b.createdAt||0)-new Date(a.createdAt||0);
-      });
+/* ═══════════════════ MAIN APP ═══════════════════════════════ */
+function FreelanceBoard(){
+  const[jobs,setJobs]=useState([]);const[entries,setEntries]=useState([]);const[settings,setSettings]=useState({defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""});
+  const[rates,setRates]=useState(FALLBACK_RATES);const[loaded,setLoaded]=useState(false);
+  const[view,setView]=useState("calendar");const[calendarMode,setCalendarMode]=useState("month");
+  const[currentMonth,setCurrentMonth]=useState(new Date().getMonth());const[currentYear,setCurrentYear]=useState(new Date().getFullYear());
+  const[activeJobId,setActiveJobId]=useState(null);const[paintPeriod,setPaintPeriod]=useState("full");
+  const[showJobForm,setShowJobForm]=useState(false);const[editingJob,setEditingJob]=useState(null);const[sidebarCollapsed,setSidebarCollapsed]=useState(false);
 
-      return (
-        <div>
-          <SectionTitle icon={Briefcase} right={<BBtn onClick={onAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Nouveau job</span></BBtn>}>Mes Jobs</SectionTitle>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-            <div style={{position:"relative",flex:1,maxWidth:260}}>
-              <Search size={14} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:DS.textLight}}/>
-              <BInput value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{paddingLeft:34}}/>
-            </div>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-              <BBtn small onClick={()=>setFilter("all")} color={filter==="all"?DS.text:DS.card} style={{color:filter==="all"?DS.card:DS.text,fontSize:11}}>Tous ({jobs.length})</BBtn>
-              {STATUS_FLOW.map(s=>{
-                const c=jobs.filter(j=>j.status===s.key).length; if(!c) return null;
-                return <BBtn key={s.key} small onClick={()=>setFilter(s.key)} color={filter===s.key?s.color:DS.card} style={{fontSize:11,color:filter===s.key?"#1A1A1A":DS.textMid}}>{s.label} ({c})</BBtn>;
-              })}
-            </div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {sorted.length===0 && <BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Briefcase size={40} strokeWidth={1.5} color={DS.textLight}/></div><div style={{fontSize:14,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{filter!=="all"?"Aucun job avec ce statut":"Aucun job - c'est le moment d'en creer un !"}</div></BCard>}
-            {sorted.map(job=>{
-              const days=calcDays(job.id); const total=calcTotal(job); const eurTotal=toEur(total,job.currency);
-              return <JobCard key={job.id} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>;
-            })}
-          </div>
-        </div>
-      );
-    }
+  useEffect(()=>{setJobs(storage.load("jobs",[]));setEntries(storage.load("entries",[]));setSettings(storage.load("settings",{defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""}));setLoaded(true)},[]);
+  useEffect(()=>{if(loaded)storage.save("jobs",jobs)},[jobs,loaded]);
+  useEffect(()=>{if(loaded)storage.save("entries",entries)},[entries,loaded]);
+  useEffect(()=>{if(loaded)storage.save("settings",settings)},[settings,loaded]);
+  useEffect(()=>{(async()=>{try{const r=await fetch("https://api.frankfurter.app/latest?from=EUR");const d=await r.json();if(d.rates){const inv={};Object.entries(d.rates).forEach(([k,v])=>{inv[k]=1/v});inv.EUR=1;setRates(inv)}}catch{}})()},[]);
 
-    // ─── SUMMARY ──────────────────────────────────────────────────
-    function SummaryView({ jobs, entries, rates, year }) {
-      const [period,setPeriod] = useState("year");
-      const [periodMonth,setPeriodMonth] = useState(new Date().getMonth());
-      const calcDays = (id,df) => { let f=entries.filter(e=>e.jobId===id); if(df) f=f.filter(df); return f.reduce((s,e)=>s+(e.period==="full"?1:0.5),0); };
-      const toEur = (a,c) => c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
-      const dateFilter = period==="month" ? (e)=>{const d=parseDate(e.date);return d.year===year&&d.month===periodMonth;} : (e)=>{const d=parseDate(e.date);return d.year===year;};
-      const jobMatch = (j) => {
-        if(j.type==="daily") return calcDays(j.id,dateFilter)>0;
-        if(period==="year") return j.startDate?.startsWith(String(year))||j.endDate?.startsWith(String(year))||(!j.startDate&&!j.endDate);
-        const pfx=`${year}-${String(periodMonth+1).padStart(2,"0")}`;
-        return j.startDate?.startsWith(pfx)||j.endDate?.startsWith(pfx)||(!j.startDate&&!j.endDate);
-      };
-      const activeJobs = jobs.filter(jobMatch);
-      const getAmt = (j) => j.type==="fixed"?j.fixedAmount:j.dailyRate*calcDays(j.id,dateFilter);
-      const getAmtEur = (j) => toEur(getAmt(j),j.currency);
+  const clients=useMemo(()=>[...new Set(jobs.map(j=>j.client).filter(Boolean))],[jobs]);
+  const saveJob=(job)=>{setJobs(p=>{const i=p.findIndex(j=>j.id===job.id);if(i>=0){const n=[...p];n[i]=job;return n}return[...p,job]});setShowJobForm(false);setEditingJob(null)};
+  const deleteJob=(id)=>{setJobs(p=>p.filter(j=>j.id!==id));setEntries(p=>p.filter(e=>e.jobId!==id));setShowJobForm(false);setEditingJob(null)};
+  const duplicateJob=(job)=>{setJobs(p=>[...p,{...job,id:uid(),name:`${job.name} (copie)`,status:"prospect",createdAt:new Date().toISOString()}])};
+  const toggleDay=(date,jobId,period)=>{setEntries(prev=>{const ex=prev.filter(e=>e.date===date);if(period==="full"){const hf=ex.find(e=>e.jobId===jobId&&e.period==="full");if(hf)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));return[...prev.filter(e=>e.date!==date),{date,jobId,period:"full"}]}const hh=ex.find(e=>e.jobId===jobId&&e.period===period);if(hh)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period===period));let next=prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));next=next.filter(e=>!(e.date===date&&e.period===period));return[...next,{date,jobId,period}]})};
+  const NAV=[{key:"calendar",label:"Calendrier",icon:Calendar},{key:"jobs",label:"Jobs",icon:Briefcase},{key:"summary",label:"Résumé",icon:BarChart3},{key:"settings",label:"Réglages",icon:Settings}];
 
-      const BUCKETS = [
-        {key:"cashed",label:"Encaisse",statuses:["paid"],color:DS.accent,Icon:DollarSign},
-        {key:"done",label:"Realise",statuses:["done","invoiced"],color:DS.orange,Icon:FileText},
-        {key:"ongoing",label:"En cours",statuses:["active"],color:DS.yellow,Icon:Zap},
-        {key:"confirmed",label:"Confirme",statuses:["confirmed"],color:DS.blue,Icon:CircleDot},
-        {key:"prospect",label:"Prospect",statuses:["prospect"],color:"#C4BAA8",Icon:Eye},
-      ];
-      const bData = BUCKETS.map(b=>({...b,jobs:activeJobs.filter(j=>b.statuses.includes(j.status)),total:activeJobs.filter(j=>b.statuses.includes(j.status)).reduce((s,j)=>s+getAmtEur(j),0)})).filter(b=>b.jobs.length>0);
-      const tCashed=bData.find(b=>b.key==="cashed")?.total||0;
-      const tDone=bData.find(b=>b.key==="done")?.total||0;
-      const tOngoing=bData.find(b=>b.key==="ongoing")?.total||0;
-      const tConfirmed=bData.find(b=>b.key==="confirmed")?.total||0;
-      const tProspect=bData.find(b=>b.key==="prospect")?.total||0;
-      const caR=tCashed+tDone; const caS=caR+tOngoing+tConfirmed; const caT=caS+tProspect;
-      const realS=["paid","invoiced","done","active","confirmed"];
-      const tDaysR=activeJobs.filter(j=>realS.includes(j.status)).reduce((s,j)=>s+calcDays(j.id,dateFilter),0);
-      const wDays=(()=>{let c=0;if(period==="month"){const d=getDaysInMonth(year,periodMonth);for(let i=1;i<=d;i++) if(!isWeekend(year,periodMonth,i)) c++;}else{for(let m=0;m<12;m++){const d=getDaysInMonth(year,m);for(let i=1;i<=d;i++) if(!isWeekend(year,m,i)) c++;}}return c;})();
-      const occ=wDays>0?Math.round((tDaysR/wDays)*100):0;
-      const maxB=Math.max(...bData.map(b=>b.total),1);
+  if(!loaded)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",backgroundColor:DS.bg,fontFamily:"'Space Mono', monospace"}}><BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><RefreshCw size={40} sw={2} style={{animation:"spin 1s linear infinite"}}/></div><div style={{fontSize:14,fontWeight:700}}>Chargement...</div></BCard></div>;
 
-      return (
-        <div>
-          <SectionTitle icon={BarChart3} right={
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              {["month","year"].map(p=>(<BBtn key={p} small onClick={()=>setPeriod(p)} color={period===p?DS.accent:DS.card} style={{fontSize:11}}>{p==="month"?"Mois":"Annee"}</BBtn>))}
-              {period==="month" && <BSelect value={periodMonth} onChange={e=>setPeriodMonth(Number(e.target.value))} style={{width:"auto",padding:"6px 30px 6px 10px",fontSize:12}}>{MONTHS_FR.map((m,i)=><option key={i} value={i}>{m}</option>)}</BSelect>}
-            </div>
-          }>Resume</SectionTitle>
+  return <div style={{display:"flex",minHeight:"100vh",backgroundColor:DS.bg,fontFamily:"'DM Sans', sans-serif",color:DS.text}}>
+    {/* Desktop Sidebar */}
+    <div className="dsb" style={{flexDirection:"column",width:sidebarCollapsed?64:210,borderRight:DS.border2,backgroundColor:DS.card,transition:"width 0.2s",flexShrink:0}}>
+      <div style={{padding:sidebarCollapsed?"16px 8px":"16px",borderBottom:DS.border2,display:"flex",alignItems:"center",gap:8}}>
+        {!sidebarCollapsed&&<div style={{fontFamily:"'Space Mono', monospace",fontSize:15,fontWeight:700}}>Freelance<span style={{color:DS.accent,textShadow:"1px 1px 0 #1A1A1A"}}>Board</span></div>}
+        <div style={{marginLeft:"auto",cursor:"pointer",padding:4}} onClick={()=>setSidebarCollapsed(!sidebarCollapsed)}>{sidebarCollapsed?<ChevronRight size={16}/>:<ChevronLeft size={16}/>}</div>
+      </div>
+      <nav style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:4}}>{NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={sidebarCollapsed} onClick={()=>setView(item.key)}/>)}</nav>
+      {!sidebarCollapsed&&<div style={{padding:12,borderTop:`1.5px dashed ${DS.textLight}40`,fontSize:10,color:DS.textLight,textAlign:"center",fontFamily:"'Space Mono', monospace"}}>{jobs.length} job{jobs.length!==1?"s":""} · {entries.length} jour{entries.length!==1?"s":""}</div>}
+    </div>
 
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10,marginBottom:12}}>
-            <BCard style={{padding:18,borderLeft:`6px solid ${DS.accent}`,background:`linear-gradient(135deg,${DS.accent}15 0%,${DS.card} 100%)`}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><DollarSign size={16} strokeWidth={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.accentDk}}>CA Realise</span></div>
-              <div style={{fontFamily:"'Space Mono', monospace",fontSize:26,fontWeight:700}}>{formatMoney(caR,"EUR")}</div>
-              <div style={{fontSize:11,color:DS.textLight,marginTop:2}}>Travail effectue</div>
-            </BCard>
-            <BCard style={{padding:18,borderLeft:`6px solid ${DS.blue}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><CircleDot size={16} strokeWidth={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.blue}}>CA Securise</span></div>
-              <div style={{fontFamily:"'Space Mono', monospace",fontSize:26,fontWeight:700}}>{formatMoney(caS,"EUR")}</div>
-              <div style={{fontSize:11,color:DS.textLight,marginTop:2}}>Realise + confirme</div>
-            </BCard>
-            <BCard style={{padding:18,borderLeft:"6px solid #C4BAA8"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><Eye size={16} strokeWidth={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:"#9B8E7E"}}>Pipeline</span></div>
-              <div style={{fontFamily:"'Space Mono', monospace",fontSize:26,fontWeight:700,color:DS.textLight}}>{formatMoney(caT,"EUR")}</div>
-              <div style={{fontSize:11,color:DS.textLight,marginTop:2}}>Tout inclus</div>
-            </BCard>
-          </div>
+    {/* Mobile Nav */}
+    <div className="mnv" style={{display:"none",position:"fixed",top:0,left:0,right:0,zIndex:50,backgroundColor:DS.card,borderBottom:DS.border2,padding:"10px 12px",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:700}}>F<span style={{color:DS.accent}}>B</span></div>
+      <div style={{display:"flex",gap:4}}>{NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={true} onClick={()=>setView(item.key)} mobile/>)}</div>
+    </div>
 
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
-            <BCard style={{padding:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:9,fontWeight:800,textTransform:"uppercase",color:DS.textLight,marginBottom:4}}>Jours</div><div style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700}}>{tDaysR}<span style={{fontSize:12,color:DS.textLight}}>/{wDays}</span></div></BCard>
-            <BCard style={{padding:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:9,fontWeight:800,textTransform:"uppercase",color:DS.textLight,marginBottom:4}}>Occupation</div><div style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700,color:occ>80?DS.accent:occ>50?DS.yellow:DS.textLight}}>{occ}%</div></BCard>
-            <BCard style={{padding:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:9,fontWeight:800,textTransform:"uppercase",color:DS.textLight,marginBottom:4}}>TJM moyen</div><div style={{fontFamily:"'Space Mono', monospace",fontSize:20,fontWeight:700}}>{tDaysR>0?formatMoney(caR/tDaysR,"EUR"):"\u2014"}</div></BCard>
-          </div>
-
-          {bData.length>0 && (
-            <BCard style={{padding:18,marginBottom:16}}>
-              <div style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textMid,marginBottom:14}}>Repartition par statut</div>
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {bData.map(b=>(
-                  <div key={b.key}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                      <span style={{fontSize:12,fontWeight:600,color:b.key==="prospect"?DS.textLight:DS.text,display:"flex",alignItems:"center",gap:6}}><b.Icon size={14} strokeWidth={2.5}/> {b.label} <span style={{fontSize:10,color:DS.textLight}}>({b.jobs.length})</span></span>
-                      <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,color:b.key==="prospect"?DS.textLight:DS.text}}>{formatMoney(b.total,"EUR")}</span>
-                    </div>
-                    <div style={{width:"100%",height:14,backgroundColor:DS.bgLight,borderRadius:4,border:"1.5px solid #1A1A1A",overflow:"hidden"}}>
-                      <div style={{height:"100%",borderRadius:2,width:`${Math.max((b.total/maxB)*100,b.total>0?3:0)}%`,backgroundColor:b.color,opacity:b.key==="prospect"?0.4:1,transition:"width 0.5s ease"}}/>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {caT>0 && (
-                <div style={{marginTop:14,paddingTop:14,borderTop:`2px dashed ${DS.textLight}40`}}>
-                  <div style={{width:"100%",height:20,borderRadius:6,border:DS.border2,overflow:"hidden",display:"flex",boxShadow:DS.shadowSm}}>
-                    {bData.map(b=><div key={b.key} style={{height:"100%",backgroundColor:b.color,width:`${(b.total/caT)*100}%`,opacity:b.key==="prospect"?0.35:0.85}} title={`${b.label}: ${formatMoney(b.total,"EUR")}`}/>)}
-                  </div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:8}}>
-                    {bData.map(b=><div key={b.key} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,backgroundColor:b.color,border:"1px solid #1A1A1A",opacity:b.key==="prospect"?0.4:1}}/><span style={{fontSize:10,color:DS.textMid}}>{b.label}</span></div>)}
-                  </div>
-                </div>
-              )}
-            </BCard>
-          )}
-
-          <BCard style={{overflow:"hidden"}}>
-            <div style={{padding:"14px 18px",borderBottom:DS.border2,backgroundColor:DS.bgLight}}>
-              <span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textMid}}>Detail par job</span>
-            </div>
-            {activeJobs.length===0 ? <div style={{padding:40,textAlign:"center"}}><div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><BarChart3 size={32} strokeWidth={1.5} color={DS.textLight}/></div><div style={{fontSize:13,color:DS.textLight}}>Aucun job sur cette periode</div></div> : (
-              <div>
-                {BUCKETS.filter(b=>activeJobs.some(j=>b.statuses.includes(j.status))).map(bk=>{
-                  const bJ=activeJobs.filter(j=>bk.statuses.includes(j.status));
-                  const bT=bJ.reduce((s,j)=>s+getAmtEur(j),0);
-                  const isP=bk.key==="prospect";
-                  return (
-                    <div key={bk.key}>
-                      <div style={{padding:"8px 18px",backgroundColor:bk.color+"20",borderBottom:`1.5px solid ${bk.color}40`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:bk.color,display:"flex",alignItems:"center",gap:5}}><bk.Icon size={12} strokeWidth={2.5}/> {bk.label}</span>
-                        <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,color:isP?DS.textLight:DS.text}}>{formatMoney(bT,"EUR")}</span>
-                      </div>
-                      {bJ.map(job=>{
-                        const d=calcDays(job.id,dateFilter); const a=getAmt(job); const ae=getAmtEur(job);
-                        return (
-                          <div key={job.id} style={{padding:"12px 18px",display:"flex",alignItems:"center",gap:12,borderBottom:`1px solid ${DS.bgLight}`,opacity:isP?0.5:1}}>
-                            <div style={{width:12,height:12,borderRadius:4,backgroundColor:job.color,border:"1.5px solid #1A1A1A",flexShrink:0}}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.name}</div>
-                              <div style={{fontSize:11,color:DS.textMid}}>{job.client&&`${job.client} \u00B7 `}{job.type==="daily"?`${d}j x ${formatMoney(job.dailyRate,job.currency)}`:"Forfait"}</div>
-                            </div>
-                            <div style={{textAlign:"right",flexShrink:0}}>
-                              <div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:700}}>{formatMoney(a,job.currency)}</div>
-                              {job.currency!=="EUR"&&a>0&&<div style={{fontSize:10,color:DS.textLight}}>~ {formatMoney(ae,"EUR")}</div>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-                <div style={{padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",backgroundColor:DS.accent+"20",borderTop:DS.border2}}>
-                  <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",gap:6}}><DollarSign size={14} strokeWidth={2.5}/> CA Realise</span>
-                  <span style={{fontFamily:"'Space Mono', monospace",fontSize:18,fontWeight:800,color:DS.accentDk}}>{formatMoney(caR,"EUR")}</span>
-                </div>
-              </div>
-            )}
+    {/* Main */}
+    <div style={{flex:1,overflowY:"auto"}}>
+      <div className="mnv" style={{display:"none",height:52}}/>
+      <div style={{maxWidth:840,margin:"0 auto",padding:"24px 16px"}}>
+        {view==="calendar"&&<div>
+          <SectionTitle icon={Calendar} right={<div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {["month","year"].map(m=><BBtn key={m} small onClick={()=>setCalendarMode(m)} color={calendarMode===m?DS.accent:DS.card} style={{fontSize:11}}>{m==="month"?"Mois":"Année"}</BBtn>)}
+            <BBtn small onClick={()=>{setCurrentMonth(new Date().getMonth());setCurrentYear(new Date().getFullYear())}} style={{fontSize:10}}>Aujourd'hui</BBtn>
+          </div>}>Calendrier</SectionTitle>
+          {calendarMode==="month"&&<PaintToolbar jobs={jobs} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod}/>}
+          <BCard style={{padding:16}}>
+            {calendarMode==="month"?<MonthCalendar year={currentYear} month={currentMonth} entries={entries} jobs={jobs} activeJobId={activeJobId} paintPeriod={paintPeriod} onToggleDay={toggleDay} onNavigate={(dir)=>{let m=currentMonth+dir,y=currentYear;if(m<0){m=11;y--}if(m>11){m=0;y++}setCurrentMonth(m);setCurrentYear(y)}}/>
+            :<YearCalendar year={currentYear} entries={entries} jobs={jobs} onNavigateYear={(d)=>setCurrentYear(y=>y+d)} onGoToMonth={(m)=>{setCurrentMonth(m);setCalendarMode("month")}}/>}
           </BCard>
-        </div>
-      );
-    }
+          {jobs.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
+            {jobs.filter(j=>entries.some(e=>e.jobId===j.id)).map(j=><div key={j.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,backgroundColor:j.color+"25",border:`1.5px solid ${j.color}`}}><div style={{width:8,height:8,borderRadius:3,backgroundColor:j.color,border:"1px solid #1A1A1A"}}/>{j.name}</div>)}
+          </div>}
+        </div>}
+        {view==="jobs"&&<JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true)}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true)}}/>}
+        {view==="summary"&&<SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
+        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)}/>}
+      </div>
+    </div>
 
-    // ─── SETTINGS ─────────────────────────────────────────────────
-    function SettingsView({ settings, onSave }) {
-      const [form,setForm] = useState(settings);
-      const set = (k,v) => setForm(f=>({...f,[k]:v}));
-      return (
-        <div style={{maxWidth:480}}>
-          <SectionTitle icon={Settings}>Reglages</SectionTitle>
-          <BCard style={{padding:20,marginBottom:14}}>
-            <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:14}}>Valeurs par defaut</div>
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <div><Label>Devise par defaut</Label><BSelect value={form.defaultCurrency} onChange={e=>set("defaultCurrency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</BSelect></div>
-              <div><Label>Tarif journalier par defaut</Label><BInput type="number" value={form.defaultDailyRate} onChange={e=>set("defaultDailyRate",e.target.value)} placeholder="350"/></div>
-            </div>
-          </BCard>
-          <BCard style={{padding:20,marginBottom:14}}>
-            <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:6}}>Google Sheets (optionnel)</div>
-            <div style={{fontSize:12,color:DS.textLight,marginBottom:12}}>Connecte un Apps Script pour sync en ligne.</div>
-            <div><Label>URL de l'Apps Script</Label><BInput value={form.apiUrl||""} onChange={e=>set("apiUrl",e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></div>
-          </BCard>
-          <BBtn onClick={()=>onSave(form)} color={DS.accent} style={{width:"100%",textAlign:"center",fontSize:14,padding:"14px 0"}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Check size={16} strokeWidth={3}/> Sauvegarder</span></BBtn>
-        </div>
-      );
-    }
+    {showJobForm&&<JobForm job={editingJob} jobs={jobs} clients={clients} onSave={saveJob} onClose={()=>{setShowJobForm(false);setEditingJob(null)}} onDelete={deleteJob}/>}
+    {view==="calendar"&&<div className="mnv" style={{display:"none",position:"fixed",bottom:20,right:20,zIndex:40}}><BBtn onClick={()=>{setEditingJob(null);setShowJobForm(true)}} color={DS.accent} style={{width:56,height:56,borderRadius:16,padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}><Plus size={26}/></BBtn></div>}
+  </div>;
+}
 
-    // ─── NAV BTN ──────────────────────────────────────────────────
-    function NavBtn({ item, active, collapsed, onClick, mobile }) {
-      const [hovered,setHovered] = useState(false);
-      const [pressed,setPressed] = useState(false);
-      return (
-        <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>{setHovered(false);setPressed(false);}} onMouseDown={()=>setPressed(true)} onMouseUp={()=>setPressed(false)}
-          style={{
-            display:"flex",alignItems:"center",gap:10,
-            padding:mobile?"6px 10px":collapsed?"10px":"10px 14px",
-            borderRadius:10,border:active?DS.border2:"2.5px solid transparent",
-            backgroundColor:active?DS.accent:hovered?DS.bgLight:"transparent",
-            boxShadow:active?(pressed?"0 0 0 #1A1A1A":DS.shadowSm):"none",
-            transform:pressed&&active?"translate(2px,2px)":"none",
-            cursor:"pointer",transition:"all 0.1s",
-            fontFamily:"'Space Mono', monospace",fontSize:mobile?16:12,fontWeight:700,
-            color:active?DS.text:DS.textMid,justifyContent:collapsed?"center":"flex-start",
-          }}>
-          <span style={{display:"flex",alignItems:"center"}}><item.icon size={mobile?18:16} strokeWidth={2.5}/></span>
-          {!collapsed && !mobile && item.label}
-        </div>
-      );
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // MAIN APP
-    // ══════════════════════════════════════════════════════════════
-    function FreelanceBoard() {
-      const [jobs,setJobs] = useState([]);
-      const [entries,setEntries] = useState([]);
-      const [settings,setSettings] = useState({defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""});
-      const [rates,setRates] = useState(FALLBACK_RATES);
-      const [loaded,setLoaded] = useState(false);
-      const [view,setView] = useState("calendar");
-      const [calendarMode,setCalendarMode] = useState("month");
-      const [currentMonth,setCurrentMonth] = useState(new Date().getMonth());
-      const [currentYear,setCurrentYear] = useState(new Date().getFullYear());
-      const [activeJobId,setActiveJobId] = useState(null);
-      const [paintPeriod,setPaintPeriod] = useState("full");
-      const [showJobForm,setShowJobForm] = useState(false);
-      const [editingJob,setEditingJob] = useState(null);
-      const [sidebarCollapsed,setSidebarCollapsed] = useState(false);
-
-      useEffect(()=>{
-        setJobs(storage.load("jobs",[]));
-        setEntries(storage.load("entries",[]));
-        setSettings(storage.load("settings",{defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""}));
-        setLoaded(true);
-      },[]);
-
-      useEffect(()=>{if(loaded) storage.save("jobs",jobs);},[jobs,loaded]);
-      useEffect(()=>{if(loaded) storage.save("entries",entries);},[entries,loaded]);
-      useEffect(()=>{if(loaded) storage.save("settings",settings);},[settings,loaded]);
-      useEffect(()=>{(async()=>{try{const r=await fetch("https://api.frankfurter.app/latest?from=EUR");const d=await r.json();if(d.rates){const inv={};Object.entries(d.rates).forEach(([k,v])=>{inv[k]=1/v;});inv.EUR=1;setRates(inv);}}catch{}})();},[]);
-
-      const clients = useMemo(()=>[...new Set(jobs.map(j=>j.client).filter(Boolean))],[jobs]);
-      const saveJob=(job)=>{setJobs(p=>{const i=p.findIndex(j=>j.id===job.id);if(i>=0){const n=[...p];n[i]=job;return n;}return[...p,job];});setShowJobForm(false);setEditingJob(null);};
-      const deleteJob=(id)=>{setJobs(p=>p.filter(j=>j.id!==id));setEntries(p=>p.filter(e=>e.jobId!==id));setShowJobForm(false);setEditingJob(null);};
-      const duplicateJob=(job)=>{setJobs(p=>[...p,{...job,id:uid(),name:`${job.name} (copie)`,status:"prospect",createdAt:new Date().toISOString()}]);};
-      const toggleDay=(date,jobId,period)=>{
-        setEntries(prev=>{
-          const ex=prev.filter(e=>e.date===date);
-          if(period==="full"){const hf=ex.find(e=>e.jobId===jobId&&e.period==="full");if(hf) return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));return[...prev.filter(e=>e.date!==date),{date,jobId,period:"full"}];}
-          const hh=ex.find(e=>e.jobId===jobId&&e.period===period);if(hh) return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period===period));
-          let next=prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));next=next.filter(e=>!(e.date===date&&e.period===period));return[...next,{date,jobId,period}];
-        });
-      };
-
-      const NAV=[{key:"calendar",label:"Calendrier",icon:Calendar},{key:"jobs",label:"Jobs",icon:Briefcase},{key:"summary",label:"Resume",icon:BarChart3},{key:"settings",label:"Reglages",icon:Settings}];
-
-      if(!loaded) return (
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",backgroundColor:DS.bg,fontFamily:"'Space Mono', monospace"}}>
-          <BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><RefreshCw size={40} strokeWidth={2} style={{animation:"spin 1s linear infinite"}}/></div><div style={{fontSize:14,fontWeight:700}}>Chargement...</div></BCard>
-        </div>
-      );
-
-      return (
-        <div style={{display:"flex",minHeight:"100vh",backgroundColor:DS.bg,fontFamily:"'DM Sans', sans-serif",color:DS.text}}>
-
-          {/* Desktop Sidebar */}
-          <div className="dsb" style={{flexDirection:"column",width:sidebarCollapsed?64:210,borderRight:DS.border2,backgroundColor:DS.card,transition:"width 0.2s",flexShrink:0}}>
-            <div style={{padding:sidebarCollapsed?"16px 8px":"16px",borderBottom:DS.border2,display:"flex",alignItems:"center",gap:8}}>
-              {!sidebarCollapsed && <div style={{fontFamily:"'Space Mono', monospace",fontSize:15,fontWeight:700}}>Freelance<span style={{color:DS.accent,textShadow:"1px 1px 0 #1A1A1A"}}>Board</span></div>}
-              <div style={{marginLeft:"auto",cursor:"pointer",padding:4}} onClick={()=>setSidebarCollapsed(!sidebarCollapsed)}>{sidebarCollapsed?<ChevronRight size={16}/>:<ChevronLeft size={16}/>}</div>
-            </div>
-            <nav style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:4}}>
-              {NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={sidebarCollapsed} onClick={()=>setView(item.key)}/>)}
-            </nav>
-            {!sidebarCollapsed && <div style={{padding:12,borderTop:`1.5px dashed ${DS.textLight}40`,fontSize:10,color:DS.textLight,textAlign:"center",fontFamily:"'Space Mono', monospace"}}>{jobs.length} job{jobs.length!==1?"s":""} \u00B7 {entries.length} jour{entries.length!==1?"s":""}</div>}
-          </div>
-
-          {/* Mobile Nav */}
-          <div className="mnv" style={{display:"none",position:"fixed",top:0,left:0,right:0,zIndex:50,backgroundColor:DS.card,borderBottom:DS.border2,padding:"10px 12px",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:700}}>F<span style={{color:DS.accent}}>B</span></div>
-            <div style={{display:"flex",gap:4}}>{NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={true} onClick={()=>setView(item.key)} mobile/>)}</div>
-          </div>
-
-          {/* Main */}
-          <div style={{flex:1,overflowY:"auto"}}>
-            <div className="mnv" style={{display:"none",height:52}}/>
-            <div style={{maxWidth:840,margin:"0 auto",padding:"24px 16px"}}>
-              {view==="calendar" && (
-                <div>
-                  <SectionTitle icon={Calendar} right={
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      {["month","year"].map(m=>(<BBtn key={m} small onClick={()=>setCalendarMode(m)} color={calendarMode===m?DS.accent:DS.card} style={{fontSize:11}}>{m==="month"?"Mois":"Annee"}</BBtn>))}
-                      <BBtn small onClick={()=>{setCurrentMonth(new Date().getMonth());setCurrentYear(new Date().getFullYear());}} style={{fontSize:10}}>Aujourd'hui</BBtn>
-                    </div>
-                  }>Calendrier</SectionTitle>
-                  {calendarMode==="month" && <PaintToolbar jobs={jobs} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod}/>}
-                  <BCard style={{padding:16}}>
-                    {calendarMode==="month"
-                      ? <MonthCalendar year={currentYear} month={currentMonth} entries={entries} jobs={jobs} activeJobId={activeJobId} paintPeriod={paintPeriod} onToggleDay={toggleDay} onNavigate={(dir)=>{let m=currentMonth+dir,y=currentYear;if(m<0){m=11;y--;}if(m>11){m=0;y++;}setCurrentMonth(m);setCurrentYear(y);}}/>
-                      : <YearCalendar year={currentYear} entries={entries} jobs={jobs} onNavigateYear={(d)=>setCurrentYear(y=>y+d)} onGoToMonth={(m)=>{setCurrentMonth(m);setCalendarMode("month");}}/>}
-                  </BCard>
-                  {jobs.length>0 && (
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
-                      {jobs.filter(j=>entries.some(e=>e.jobId===j.id)).map(j=>(
-                        <div key={j.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,color:DS.text,backgroundColor:j.color+"25",border:`1.5px solid ${j.color}`}}>
-                          <div style={{width:8,height:8,borderRadius:3,backgroundColor:j.color,border:"1px solid #1A1A1A"}}/>{j.name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {view==="jobs" && <JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true);}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true);}}/>}
-              {view==="summary" && <SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
-              {view==="settings" && <SettingsView settings={settings} onSave={(s)=>setSettings(s)}/>}
-            </div>
-          </div>
-
-          {showJobForm && <JobForm job={editingJob} jobs={jobs} clients={clients} onSave={saveJob} onClose={()=>{setShowJobForm(false);setEditingJob(null);}} onDelete={deleteJob}/>}
-          {view==="calendar" && <div className="mnv" style={{display:"none",position:"fixed",bottom:20,right:20,zIndex:40}}><BBtn onClick={()=>{setEditingJob(null);setShowJobForm(true);}} color={DS.accent} style={{width:56,height:56,borderRadius:16,padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}><Plus size={26}/></BBtn></div>}
-        </div>
-      );
-    }
-
-    // ─── RENDER ───────────────────────────────────────────────────
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<FreelanceBoard />);
+ReactDOM.createRoot(document.getElementById("root")).render(<FreelanceBoard/>);
   </script>
 </body>
 </html>
