@@ -126,22 +126,60 @@ const storage={
 /* ─── GOOGLE SHEETS SYNC ─────────────────────────────────── */
 const SYNC_URL="https://script.google.com/macros/s/AKfycbzgr160xhEov8o6VZjrixfQqcDigR0iaC9RsnOqCMwh5HP9_ZVZxRbNeIMp0rDK0Ghm3Q/exec";
 
+/* Normalise une date en "YYYY-MM-DD" quel que soit le format reçu */
+function normDate(v){
+  if(!v||v==="")return"";
+  if(typeof v==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v))return v; // déjà bon
+  // Tente de parser
+  const d=new Date(v);
+  if(isNaN(d.getTime()))return String(v);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+/* Normalise les entries reçues du Sheet */
+function normEntries(entries){
+  if(!Array.isArray(entries))return[];
+  return entries.filter(e=>e&&e.date&&e.jobId&&e.period).map(e=>({
+    date:normDate(e.date),
+    jobId:String(e.jobId),
+    period:String(e.period)
+  }));
+}
+
+/* Normalise les jobs reçus du Sheet */
+function normJobs(jobs){
+  if(!Array.isArray(jobs))return[];
+  return jobs.filter(j=>j&&j.id&&j.name).map(j=>({
+    ...j,
+    id:String(j.id),
+    dailyRate:parseFloat(j.dailyRate)||0,
+    fixedAmount:parseFloat(j.fixedAmount)||0,
+    startDate:normDate(j.startDate),
+    endDate:normDate(j.endDate),
+    createdAt:j.createdAt||""
+  }));
+}
+
 const syncApi={
   async pull(){
     const r=await fetch(SYNC_URL+"?action=readAll",{redirect:"follow"});
     const text=await r.text();
-    try{return JSON.parse(text)}catch{throw new Error("Réponse invalide du serveur")}
+    let res;
+    try{res=JSON.parse(text)}catch{throw new Error("Réponse invalide du serveur")}
+    // Normaliser les données pour éviter les problèmes de format
+    if(res.success&&res.data){
+      if(res.data.entries)res.data.entries=normEntries(res.data.entries);
+      if(res.data.jobs)res.data.jobs=normJobs(res.data.jobs);
+    }
+    return res;
   },
   async push(data){
-    // Google Apps Script redirige les POST → on utilise no-cors pour que le body passe
-    // Le write se fait côté serveur même si la réponse est opaque
     await fetch(SYNC_URL,{
       method:"POST",
       mode:"no-cors",
       headers:{"Content-Type":"text/plain"},
       body:JSON.stringify({action:"writeAll",...data})
     });
-    // Vérification : on relit pour confirmer que ça a pris
     await new Promise(r=>setTimeout(r,800));
     const check=await fetch(SYNC_URL+"?action=ping",{redirect:"follow"});
     const txt=await check.text();
@@ -341,23 +379,105 @@ function JobCard({job,days,total,eurTotal,statusInfo,onEdit,onDuplicate}){
 /* ─── JOBS LIST ────────────────────────────────────────────── */
 function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
   const[filter,setFilter]=useState("all");const[search,setSearch]=useState("");
+  const curYear=new Date().getFullYear();
+  const[selectedYear,setSelectedYear]=useState(curYear);
+
   const cd=(id)=>entries.filter(e=>e.jobId===id).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
   const ct=(j)=>j.type==="fixed"?j.fixedAmount:j.dailyRate*cd(j.id);
   const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
-  const fl=jobs.filter(j=>{if(filter!=="all"&&j.status!==filter)return false;if(search&&!j.name.toLowerCase().includes(search.toLowerCase())&&!(j.client||"").toLowerCase().includes(search.toLowerCase()))return false;return true});
-  const so=[...fl].sort((a,b)=>{const o=STATUS_FLOW.map(s=>s.key);if(o.indexOf(a.status)!==o.indexOf(b.status))return o.indexOf(a.status)-o.indexOf(b.status);return new Date(b.createdAt||0)-new Date(a.createdAt||0)});
+
+  /* Détermine le mois d'un job (startDate > createdAt > entries) */
+  const getJobMonth=(j)=>{
+    const d=j.startDate||j.createdAt||"";
+    if(d){const p=d.split("-");if(p.length>=2)return parseInt(p[1],10)-1}
+    // Fallback: premier entry du job
+    const fe=entries.find(e=>e.jobId===j.id);
+    if(fe){const p=fe.date.split("-");if(p.length>=2)return parseInt(p[1],10)-1}
+    return 0;
+  };
+  const getJobYear=(j)=>{
+    const d=j.startDate||j.createdAt||"";
+    if(d){const p=d.split("-");if(p.length>=1&&p[0].length===4)return parseInt(p[0],10)}
+    const fe=entries.find(e=>e.jobId===j.id);
+    if(fe){const p=fe.date.split("-");if(p.length>=1)return parseInt(p[0],10)}
+    return curYear;
+  };
+
+  /* Années disponibles */
+  const years=useMemo(()=>{
+    const s=new Set();jobs.forEach(j=>s.add(getJobYear(j)));
+    s.add(curYear);
+    return[...s].sort((a,b)=>b-a);
+  },[jobs]);
+
+  /* Filtrage : année + statut + recherche */
+  const fl=jobs.filter(j=>{
+    if(getJobYear(j)!==selectedYear)return false;
+    if(filter!=="all"&&j.status!==filter)return false;
+    if(search&&!j.name.toLowerCase().includes(search.toLowerCase())&&!(j.client||"").toLowerCase().includes(search.toLowerCase()))return false;
+    return true;
+  });
+
+  /* Comptes par statut pour l'année sélectionnée */
+  const yearJobs=jobs.filter(j=>getJobYear(j)===selectedYear);
+
+  /* Grouper par mois (décroissant : mois récent en haut) */
+  const grouped=useMemo(()=>{
+    const months={};
+    fl.forEach(j=>{const m=getJobMonth(j);if(!months[m])months[m]=[];months[m].push(j)});
+    // Trier les mois du plus récent au plus ancien
+    const sorted=Object.entries(months).sort(([a],[b])=>Number(b)-Number(a));
+    // Trier les jobs dans chaque mois par statut puis date
+    const statusOrder=STATUS_FLOW.map(s=>s.key);
+    sorted.forEach(([,arr])=>arr.sort((a,b)=>{
+      if(statusOrder.indexOf(a.status)!==statusOrder.indexOf(b.status))return statusOrder.indexOf(a.status)-statusOrder.indexOf(b.status);
+      return new Date(b.createdAt||0)-new Date(a.createdAt||0);
+    }));
+    return sorted;
+  },[fl]);
+
+  /* Total CA année */
+  const yearTotal=fl.reduce((s,j)=>s+te(ct(j),j.currency),0);
+
   return <div>
     <SectionTitle icon={Briefcase} right={<BBtn onClick={onAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Nouveau job</span></BBtn>}>Mes Jobs</SectionTitle>
+
+    {/* Toolbar : année + recherche + filtres */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-      <div style={{position:"relative",flex:1,maxWidth:260}}><Search size={14} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:DS.textLight}}/><BInput value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{paddingLeft:34}}/></div>
-      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-        <BBtn small onClick={()=>setFilter("all")} color={filter==="all"?DS.text:DS.card} style={{color:filter==="all"?DS.card:DS.text,fontSize:11}}>Tous ({jobs.length})</BBtn>
-        {STATUS_FLOW.map(s=>{const c=jobs.filter(j=>j.status===s.key).length;if(!c)return null;return <BBtn key={s.key} small onClick={()=>setFilter(s.key)} color={filter===s.key?s.color:DS.card} style={{fontSize:11,color:filter===s.key?"#1A1A1A":DS.textMid}}>{s.label} ({c})</BBtn>})}
-      </div>
+      {/* Sélecteur d'année */}
+      <BSelect value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={{width:"auto",padding:"8px 32px 8px 12px",fontSize:13,fontFamily:"'Space Mono', monospace",fontWeight:700}}>
+        {years.map(y=><option key={y} value={y}>{y}</option>)}
+      </BSelect>
+      <div style={{position:"relative",flex:1,maxWidth:220}}><Search size={14} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:DS.textLight}}/><BInput value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{paddingLeft:34}}/></div>
+      {yearTotal>0&&<div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,padding:"6px 12px",borderRadius:8,backgroundColor:DS.accent+"20",border:`1.5px solid ${DS.accent}`,color:DS.accentDk}}>{formatMoney(yearTotal,"EUR")}</div>}
     </div>
-    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      {!so.length&&<BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Briefcase size={40} sw={1.5} color={DS.textLight}/></div><div style={{fontSize:14,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{filter!=="all"?"Aucun job avec ce statut":"Aucun job \u2014 c'est le moment d'en créer un !"}</div></BCard>}
-      {so.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
+
+    {/* Filtres par statut */}
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:14}}>
+      <BBtn small onClick={()=>setFilter("all")} color={filter==="all"?DS.text:DS.card} style={{color:filter==="all"?DS.card:DS.text,fontSize:11}}>Tous ({yearJobs.length})</BBtn>
+      {STATUS_FLOW.map(s=>{const c=yearJobs.filter(j=>j.status===s.key).length;if(!c)return null;return <BBtn key={s.key} small onClick={()=>setFilter(s.key)} color={filter===s.key?s.color:DS.card} style={{fontSize:11,color:filter===s.key?"#1A1A1A":DS.textMid}}>{s.label} ({c})</BBtn>})}
+    </div>
+
+    {/* Jobs groupés par mois */}
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {!grouped.length&&<BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Briefcase size={40} sw={1.5} color={DS.textLight}/></div><div style={{fontSize:14,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{filter!=="all"?"Aucun job avec ce statut":search?"Aucun résultat":"Aucun job en "+selectedYear+" — c'est le moment d'en créer un !"}</div></BCard>}
+      {grouped.map(([monthIdx,monthJobs])=>{
+        const mi=Number(monthIdx);
+        const monthTotal=monthJobs.reduce((s,j)=>s+te(ct(j),j.currency),0);
+        return <div key={monthIdx}>
+          {/* Séparateur mois */}
+          <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 0 8px",padding:"0 4px"}}>
+            <div style={{fontFamily:"'Space Mono', monospace",fontSize:13,fontWeight:800,color:DS.text,textTransform:"uppercase",letterSpacing:"0.05em"}}>{MONTHS_FR[mi]}</div>
+            <div style={{flex:1,height:2,backgroundColor:DS.text,opacity:0.15,borderRadius:1}}/>
+            <div style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,color:DS.textMid}}>{monthJobs.length} job{monthJobs.length>1?"s":""}</div>
+            {monthTotal>0&&<div style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,color:DS.accentDk}}>{formatMoney(monthTotal,"EUR")}</div>}
+          </div>
+          {/* Job cards du mois */}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {monthJobs.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
+          </div>
+        </div>;
+      })}
     </div>
   </div>;
 }
@@ -446,10 +566,9 @@ function SummaryView({jobs,entries,rates,year}){
 }
 
 /* ─── SETTINGS ─────────────────────────────────────────────── */
-function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync,onPush,onPull}){
+function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync}){
   const[form,setForm]=useState(settings);const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const fmtDate=(iso)=>{if(!iso)return"Jamais";try{const d=new Date(iso);return d.toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}catch{return"Jamais"}};
-  const isSyncing=syncStatus==="syncing";
   return <div style={{maxWidth:480}}>
     <SectionTitle icon={Settings}>Réglages</SectionTitle>
     <BCard style={{padding:20,marginBottom:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:14}}>Valeurs par défaut</div>
@@ -459,33 +578,18 @@ function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync,onPush,onPull
       </div>
     </BCard>
 
-    {/* Sync Panel */}
+    {/* Sync status */}
     <BCard style={{padding:20,marginBottom:14}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <RefreshCw size={16} sw={2.5}/>
         <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700}}>Google Sheets Sync</span>
         <span style={{marginLeft:"auto",padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:800,backgroundColor:DS.accent+"30",color:DS.accentDk,border:`1.5px solid ${DS.accent}`,fontFamily:"'Space Mono', monospace"}}>AUTO</span>
       </div>
       <div style={{fontSize:12,color:DS.textMid,marginBottom:14,lineHeight:1.5}}>
-        Tes données se synchronisent automatiquement avec Google Sheets à chaque modification. Tu peux aussi forcer un sync manuellement :
+        Les données se synchronisent automatiquement avec Google Sheets à chaque modification. Au chargement, les données sont récupérées depuis le Sheet.
       </div>
 
-      <div style={{display:"flex",gap:8,marginBottom:12}}>
-        <BBtn small onClick={onPush} disabled={isSyncing} color={DS.accent} style={{flex:1,textAlign:"center",fontSize:12}}>
-          <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-            {isSyncing&&syncMsg.includes("Envoi")?<RefreshCw size={13} sw={2.5} style={{animation:"spin 1s linear infinite"}}/>:<ArrowRight size={13} sw={2.5}/>}
-            Push → Sheets
-          </span>
-        </BBtn>
-        <BBtn small onClick={onPull} disabled={isSyncing} color={DS.blue} style={{flex:1,textAlign:"center",fontSize:12,color:"white"}}>
-          <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-            {isSyncing&&syncMsg.includes("Récup")?<RefreshCw size={13} sw={2.5} style={{animation:"spin 1s linear infinite"}}/>:<ChevronLeft size={13} sw={2.5}/>}
-            Pull ← Sheets
-          </span>
-        </BBtn>
-      </div>
-
-      {syncStatus!=="idle"&&<div style={{padding:"8px 12px",borderRadius:8,fontSize:12,fontFamily:"'Space Mono', monospace",marginBottom:8,
+      {syncStatus!=="idle"&&<div style={{padding:"8px 12px",borderRadius:8,fontSize:12,fontFamily:"'Space Mono', monospace",marginBottom:10,
         backgroundColor:syncStatus==="success"?DS.accent+"25":syncStatus==="error"?"#FF6B5725":DS.yellow+"25",
         border:`1.5px solid ${syncStatus==="success"?DS.accent:syncStatus==="error"?"#FF6B57":DS.yellow}`,
         color:syncStatus==="success"?DS.accentDk:syncStatus==="error"?"#FF6B57":"#B8860B",
@@ -498,14 +602,6 @@ function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync,onPush,onPull
 
       <div style={{fontSize:11,color:DS.textLight,display:"flex",alignItems:"center",gap:4}}>
         <Clock size={11}/> Dernière sync : {fmtDate(lastSync)}
-      </div>
-
-      <div style={{marginTop:14,padding:12,borderRadius:8,backgroundColor:"#FFF8E8",border:"1.5px solid #FFD23F60"}}>
-        <div style={{fontSize:11,color:DS.textMid,lineHeight:1.5}}>
-          <b>Push</b> = envoie le local vers le Sheet (écrase le Sheet).<br/>
-          <b>Pull</b> = récupère le Sheet vers le local (écrase le local).<br/>
-          <span style={{fontSize:10,color:DS.textLight}}>Au chargement, FreelanceBoard récupère automatiquement les données du Sheet.</span>
-        </div>
       </div>
     </BCard>
 
@@ -542,11 +638,15 @@ function FreelanceBoard(){
   const[lastSync,setLastSync]=useState(storage.load("lastSync",null));
   const pushTimerRef=useRef(null);
   const initialLoadDone=useRef(false);
+  const isPulling=useRef(false); // Guard: empêche l'auto-push pendant un pull
 
-  /* ─── AUTO-PUSH (debounced 1.5s after any data change) ─── */
+  /* ─── AUTO-PUSH (debounced 2s after any data change) ─── */
   const autoPush=useCallback((currentJobs,currentEntries,currentSettings)=>{
+    // Ne PAS push si on est en train de pull (sinon on ré-écrit les données corrompues/partielles)
+    if(isPulling.current)return;
     if(pushTimerRef.current)clearTimeout(pushTimerRef.current);
     pushTimerRef.current=setTimeout(async()=>{
+      if(isPulling.current)return; // Double check
       setSyncStatus("syncing");setSyncMsg("Sync auto...");
       try{
         const settingsToSync={...currentSettings};delete settingsToSync.apiUrl;
@@ -559,49 +659,8 @@ function FreelanceBoard(){
         setSyncStatus("error");setSyncMsg("Erreur sync");
         setTimeout(()=>setSyncStatus(s=>s==="error"?"idle":s),5000);
       }
-    },1500);
+    },2000);
   },[]);
-
-  /* ─── MANUAL PUSH ──────────────────────────────────── */
-  const doManualPush=useCallback(async()=>{
-    if(pushTimerRef.current)clearTimeout(pushTimerRef.current);
-    setSyncStatus("syncing");setSyncMsg("Envoi vers Sheets...");
-    try{
-      const settingsToSync={...settings};delete settingsToSync.apiUrl;
-      await syncApi.push({jobs,entries,settings:settingsToSync});
-      const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
-      setSyncStatus("success");setSyncMsg("Envoyé vers Google Sheets");
-      setTimeout(()=>setSyncStatus(s=>s==="success"?"idle":s),3000);
-    }catch(err){
-      console.error("Push error:",err);
-      setSyncStatus("error");setSyncMsg(err.message||"Erreur push");
-      setTimeout(()=>setSyncStatus(s=>s==="error"?"idle":s),5000);
-    }
-  },[jobs,entries,settings]);
-
-  /* ─── MANUAL PULL ──────────────────────────────────── */
-  const doManualPull=useCallback(async()=>{
-    if(pushTimerRef.current)clearTimeout(pushTimerRef.current);
-    setSyncStatus("syncing");setSyncMsg("Récupération depuis Sheets...");
-    try{
-      const res=await syncApi.pull();
-      if(!res.success)throw new Error(res.error||"Erreur pull");
-      const d=res.data;
-      if(d.jobs){setJobs(d.jobs);storage.save("jobs",d.jobs)}
-      if(d.entries){setEntries(d.entries);storage.save("entries",d.entries)}
-      if(d.settings){
-        const merged={...settings,...d.settings,apiUrl:settings.apiUrl};
-        setSettings(merged);storage.save("settings",merged);
-      }
-      const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
-      setSyncStatus("success");setSyncMsg("Récupéré depuis Google Sheets");
-      setTimeout(()=>setSyncStatus(s=>s==="success"?"idle":s),3000);
-    }catch(err){
-      console.error("Pull error:",err);
-      setSyncStatus("error");setSyncMsg(err.message||"Erreur pull");
-      setTimeout(()=>setSyncStatus(s=>s==="error"?"idle":s),5000);
-    }
-  },[settings]);
 
   /* ─── LOAD LOCAL + PULL FROM SHEETS ON FIRST LOAD ─── */
   useEffect(()=>{
@@ -610,21 +669,23 @@ function FreelanceBoard(){
     const localSettings=storage.load("settings",{defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""});
     setJobs(localJobs);setEntries(localEntries);setSettings(localSettings);
     setLoaded(true);
-    // Pull from Sheets on first load (merge: Sheets wins if it has data)
+    // Pull from Sheets on first load
+    isPulling.current=true; // Bloque l'auto-push pendant le chargement initial
     (async()=>{
       try{
         const res=await syncApi.pull();
         if(res.success&&res.data){
           const d=res.data;
+          // Les données sont normalisées par syncApi.pull()
           const sheetHasData=(d.jobs&&d.jobs.length>0)||(d.entries&&d.entries.length>0);
           if(sheetHasData){
-            if(d.jobs){setJobs(d.jobs);storage.save("jobs",d.jobs)}
+            if(d.jobs&&d.jobs.length>0){setJobs(d.jobs);storage.save("jobs",d.jobs)}
             if(d.entries){setEntries(d.entries);storage.save("entries",d.entries)}
             if(d.settings){
               const merged={...localSettings,...d.settings,apiUrl:localSettings.apiUrl};
               setSettings(merged);storage.save("settings",merged);
             }
-            console.log("FreelanceBoard: données récupérées depuis Google Sheets");
+            console.log("FreelanceBoard: données récupérées depuis Google Sheets ("+d.jobs.length+" jobs, "+d.entries.length+" entries)");
           }else if(localJobs.length>0){
             // Sheet vide mais local a des données → push initial
             const settingsToSync={...localSettings};delete settingsToSync.apiUrl;
@@ -634,14 +695,18 @@ function FreelanceBoard(){
           const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
         }
       }catch(err){console.warn("FreelanceBoard: sync initiale échouée, mode local",err)}
-      initialLoadDone.current=true;
+      // Relâche les guards après un délai
+      setTimeout(()=>{
+        initialLoadDone.current=true;
+        isPulling.current=false;
+      },2000);
     })();
   },[]);
 
   /* ─── AUTO-PUSH on data changes (after initial load) ─── */
   useEffect(()=>{if(loaded){storage.save("jobs",jobs);if(initialLoadDone.current)autoPush(jobs,entries,settings)}},[jobs]);
   useEffect(()=>{if(loaded){storage.save("entries",entries);if(initialLoadDone.current)autoPush(jobs,entries,settings)}},[entries]);
-  useEffect(()=>{if(loaded)storage.save("settings",settings)},[settings,loaded]);
+  useEffect(()=>{if(loaded){storage.save("settings",settings);if(initialLoadDone.current)autoPush(jobs,entries,settings)}},[settings]);
   useEffect(()=>{(async()=>{try{const r=await fetch("https://api.frankfurter.app/latest?from=EUR");const d=await r.json();if(d.rates){const inv={};Object.entries(d.rates).forEach(([k,v])=>{inv[k]=1/v});inv.EUR=1;setRates(inv)}}catch{}})()},[]);
 
   const clients=useMemo(()=>[...new Set(jobs.map(j=>j.client).filter(Boolean))],[jobs]);
@@ -663,9 +728,9 @@ function FreelanceBoard(){
       <nav style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:4}}>{NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={sidebarCollapsed} onClick={()=>setView(item.key)}/>)}</nav>
       {!sidebarCollapsed&&<div style={{padding:12,borderTop:`1.5px dashed ${DS.textLight}40`,fontSize:10,color:DS.textLight,textAlign:"center",fontFamily:"'Space Mono', monospace"}}>
         {jobs.length} job{jobs.length!==1?"s":""} · {entries.length} jour{entries.length!==1?"s":""}
-        <div onClick={doManualPush} title="Forcer sync vers Sheets" style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"5px 8px",borderRadius:6,cursor:"pointer",backgroundColor:syncStatus==="syncing"?DS.yellow+"30":syncStatus==="success"?DS.accent+"30":syncStatus==="error"?"#FF6B5730":DS.bgLight,border:`1.5px solid ${syncStatus==="syncing"?DS.yellow:syncStatus==="success"?DS.accent:syncStatus==="error"?"#FF6B57":DS.textLight+"40"}`,transition:"all 0.2s"}}>
+        <div title={syncStatus==="syncing"?"Synchronisation...":syncStatus==="success"?"Synchronisé":syncStatus==="error"?"Erreur de sync":"Sync auto activée"} style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"5px 8px",borderRadius:6,backgroundColor:syncStatus==="syncing"?DS.yellow+"30":syncStatus==="success"?DS.accent+"30":syncStatus==="error"?"#FF6B5730":DS.bgLight,border:`1.5px solid ${syncStatus==="syncing"?DS.yellow:syncStatus==="success"?DS.accent:syncStatus==="error"?"#FF6B57":DS.textLight+"40"}`,transition:"all 0.3s"}}>
           <RefreshCw size={10} sw={2.5} style={syncStatus==="syncing"?{animation:"spin 1s linear infinite"}:{}}/>
-          <span>{syncStatus==="syncing"?"Sync...":syncStatus==="success"?"Synced":syncStatus==="error"?"Erreur":"Sync"}</span>
+          <span>{syncStatus==="syncing"?"Sync...":syncStatus==="success"?"Synced":syncStatus==="error"?"Erreur":"Auto-sync"}</span>
         </div>
       </div>}
     </div>
@@ -696,7 +761,7 @@ function FreelanceBoard(){
         </div>}
         {view==="jobs"&&<JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true)}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true)}}/>}
         {view==="summary"&&<SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
-        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)} syncStatus={syncStatus} syncMsg={syncMsg} lastSync={lastSync} onPush={doManualPush} onPull={doManualPull}/>}
+        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)} syncStatus={syncStatus} syncMsg={syncMsg} lastSync={lastSync}/>}
       </div>
     </div>
 
