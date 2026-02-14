@@ -383,68 +383,113 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
   const[selectedYear,setSelectedYear]=useState(curYear);
 
   const cd=(id)=>entries.filter(e=>e.jobId===id).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
+  const cdForMonth=(id,y,m)=>entries.filter(e=>{
+    if(e.jobId!==id)return false;
+    const p=e.date.split("-");return parseInt(p[0],10)===y&&parseInt(p[1],10)-1===m;
+  }).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
   const ct=(j)=>j.type==="fixed"?j.fixedAmount:j.dailyRate*cd(j.id);
   const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
 
-  /* Détermine le mois d'un job (startDate > createdAt > entries) */
-  const getJobMonth=(j)=>{
+  /* Pour chaque job, trouver les {year,month} où il a des entries */
+  const jobMonths=useMemo(()=>{
+    const map={};// jobId -> Set of "YYYY-MM"
+    entries.forEach(e=>{
+      if(!e.date||!e.jobId)return;
+      const p=e.date.split("-");if(p.length<2)return;
+      const key=e.jobId;
+      if(!map[key])map[key]=new Set();
+      map[key].add(p[0]+"-"+p[1]);
+    });
+    return map;
+  },[entries]);
+
+  /* Fallback : année/mois si aucune entry */
+  const fallbackYM=(j)=>{
     const d=j.startDate||j.createdAt||"";
-    if(d){const p=d.split("-");if(p.length>=2)return parseInt(p[1],10)-1}
-    // Fallback: premier entry du job
-    const fe=entries.find(e=>e.jobId===j.id);
-    if(fe){const p=fe.date.split("-");if(p.length>=2)return parseInt(p[1],10)-1}
-    return 0;
-  };
-  const getJobYear=(j)=>{
-    const d=j.startDate||j.createdAt||"";
-    if(d){const p=d.split("-");if(p.length>=1&&p[0].length===4)return parseInt(p[0],10)}
-    const fe=entries.find(e=>e.jobId===j.id);
-    if(fe){const p=fe.date.split("-");if(p.length>=1)return parseInt(p[0],10)}
-    return curYear;
+    if(d){const p=d.split("-");if(p.length>=2)return{y:parseInt(p[0],10),m:parseInt(p[1],10)-1}}
+    return{y:curYear,m:new Date().getMonth()};
   };
 
-  /* Années disponibles */
+  /* Toutes les années où il y a des données */
   const years=useMemo(()=>{
-    const s=new Set();jobs.forEach(j=>s.add(getJobYear(j)));
-    s.add(curYear);
+    const s=new Set();s.add(curYear);
+    jobs.forEach(j=>{
+      const ms=jobMonths[j.id];
+      if(ms&&ms.size>0){ms.forEach(ym=>{s.add(parseInt(ym.split("-")[0],10))})}
+      else{s.add(fallbackYM(j).y)}
+    });
     return[...s].sort((a,b)=>b-a);
-  },[jobs]);
+  },[jobs,jobMonths]);
 
-  /* Filtrage : année + statut + recherche */
-  const fl=jobs.filter(j=>{
-    if(getJobYear(j)!==selectedYear)return false;
+  /* Filtrage par statut + recherche */
+  const matchesFilter=(j)=>{
     if(filter!=="all"&&j.status!==filter)return false;
     if(search&&!j.name.toLowerCase().includes(search.toLowerCase())&&!(j.client||"").toLowerCase().includes(search.toLowerCase()))return false;
     return true;
-  });
+  };
 
-  /* Comptes par statut pour l'année sélectionnée */
-  const yearJobs=jobs.filter(j=>getJobYear(j)===selectedYear);
-
-  /* Grouper par mois (décroissant : mois récent en haut) */
+  /* Construire le groupement : pour chaque mois de l'année sélectionnée, lister les jobs qui y ont des entries */
   const grouped=useMemo(()=>{
-    const months={};
-    fl.forEach(j=>{const m=getJobMonth(j);if(!months[m])months[m]=[];months[m].push(j)});
-    // Trier les mois du plus récent au plus ancien
+    const months={};// monthIdx -> [jobs]
+    const placed=new Set();// track jobs placed at least once
+
+    jobs.forEach(j=>{
+      if(!matchesFilter(j))return;
+      const ms=jobMonths[j.id];
+      if(ms&&ms.size>0){
+        ms.forEach(ym=>{
+          const[yStr,mStr]=ym.split("-");
+          const y=parseInt(yStr,10),m=parseInt(mStr,10)-1;
+          if(y===selectedYear){
+            if(!months[m])months[m]=[];
+            // Éviter les doublons (même job déjà dans ce mois)
+            if(!months[m].some(x=>x.id===j.id)){months[m].push(j);placed.add(j.id)}
+          }
+        });
+      }
+    });
+
+    // Jobs sans entries → fallback
+    jobs.forEach(j=>{
+      if(!matchesFilter(j))return;
+      if(placed.has(j.id))return;
+      const fb=fallbackYM(j);
+      if(fb.y===selectedYear){
+        if(!months[fb.m])months[fb.m]=[];
+        months[fb.m].push(j);
+      }
+    });
+
+    // Trier mois décroissant, jobs par statut dans chaque mois
     const sorted=Object.entries(months).sort(([a],[b])=>Number(b)-Number(a));
-    // Trier les jobs dans chaque mois par statut puis date
     const statusOrder=STATUS_FLOW.map(s=>s.key);
     sorted.forEach(([,arr])=>arr.sort((a,b)=>{
       if(statusOrder.indexOf(a.status)!==statusOrder.indexOf(b.status))return statusOrder.indexOf(a.status)-statusOrder.indexOf(b.status);
       return new Date(b.createdAt||0)-new Date(a.createdAt||0);
     }));
     return sorted;
-  },[fl]);
+  },[jobs,entries,jobMonths,selectedYear,filter,search]);
 
-  /* Total CA année */
-  const yearTotal=fl.reduce((s,j)=>s+te(ct(j),j.currency),0);
+  /* Comptes pour les filtres */
+  const yearJobIds=useMemo(()=>{
+    const ids=new Set();
+    jobs.forEach(j=>{
+      const ms=jobMonths[j.id];
+      if(ms&&ms.size>0){ms.forEach(ym=>{if(parseInt(ym.split("-")[0],10)===selectedYear)ids.add(j.id)})}
+      else if(fallbackYM(j).y===selectedYear)ids.add(j.id);
+    });
+    return ids;
+  },[jobs,jobMonths,selectedYear]);
+  const yearJobs=jobs.filter(j=>yearJobIds.has(j.id));
+
+  /* Total CA année (sans doublons) */
+  const yearTotal=yearJobs.filter(j=>matchesFilter(j)).reduce((s,j)=>s+te(ct(j),j.currency),0);
 
   return <div>
     <SectionTitle icon={Briefcase} right={<BBtn onClick={onAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Nouveau job</span></BBtn>}>Mes Jobs</SectionTitle>
 
     {/* Toolbar : année + recherche + filtres */}
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-      {/* Sélecteur d'année */}
       <BSelect value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))} style={{width:"auto",padding:"8px 32px 8px 12px",fontSize:13,fontFamily:"'Space Mono', monospace",fontWeight:700}}>
         {years.map(y=><option key={y} value={y}>{y}</option>)}
       </BSelect>
@@ -463,7 +508,11 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
       {!grouped.length&&<BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><Briefcase size={40} sw={1.5} color={DS.textLight}/></div><div style={{fontSize:14,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{filter!=="all"?"Aucun job avec ce statut":search?"Aucun résultat":"Aucun job en "+selectedYear+" — c'est le moment d'en créer un !"}</div></BCard>}
       {grouped.map(([monthIdx,monthJobs])=>{
         const mi=Number(monthIdx);
-        const monthTotal=monthJobs.reduce((s,j)=>s+te(ct(j),j.currency),0);
+        const monthTotal=monthJobs.reduce((s,j)=>{
+          // Pour le total du mois : si daily, compter seulement les jours de CE mois
+          if(j.type==="daily"){const d=cdForMonth(j.id,selectedYear,mi);return s+te(j.dailyRate*d,j.currency)}
+          return s+te(j.fixedAmount,j.currency);
+        },0);
         return <div key={monthIdx}>
           {/* Séparateur mois */}
           <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 0 8px",padding:"0 4px"}}>
@@ -474,7 +523,7 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
           </div>
           {/* Job cards du mois */}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {monthJobs.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
+            {monthJobs.map(job=>{const days=cd(job.id),total=ct(job),eurTotal=te(total,job.currency);return <JobCard key={job.id+"-"+mi} job={job} days={days} total={total} eurTotal={eurTotal} statusInfo={STATUS_FLOW.find(s=>s.key===job.status)} onEdit={onEdit} onDuplicate={onDuplicate}/>})}
           </div>
         </div>;
       })}
