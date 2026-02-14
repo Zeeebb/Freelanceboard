@@ -123,6 +123,30 @@ const storage={
   save(k,d){try{localStorage.setItem(`fb_${k}`,JSON.stringify(d))}catch(e){console.warn("save err",e)}}
 };
 
+/* ─── GOOGLE SHEETS SYNC API ─────────────────────────────── */
+const syncApi={
+  async pull(apiUrl){
+    const r=await fetch(apiUrl+"?action=readAll");
+    if(!r.ok)throw new Error("Erreur serveur: "+r.status);
+    return await r.json();
+  },
+  async push(apiUrl,data){
+    const payload=JSON.stringify({action:"writeAll",...data});
+    try{
+      const r=await fetch(apiUrl,{method:"POST",body:payload});
+      return await r.json();
+    }catch(e){
+      // Fallback no-cors (write passe quand même, réponse opaque)
+      await fetch(apiUrl,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:payload});
+      return{success:true,message:"Données envoyées (mode fallback)"};
+    }
+  },
+  async ping(apiUrl){
+    const r=await fetch(apiUrl+"?action=ping");
+    return await r.json();
+  }
+};
+
 /* ─── JOB FORM ─────────────────────────────────────────────── */
 function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
   const isEdit=!!job?.id;
@@ -418,8 +442,12 @@ function SummaryView({jobs,entries,rates,year}){
 }
 
 /* ─── SETTINGS ─────────────────────────────────────────────── */
-function SettingsView({settings,onSave}){
+function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync,onPush,onPull,onPing,hasApiUrl}){
   const[form,setForm]=useState(settings);const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const[pingResult,setPingResult]=useState(null);const[pinging,setPinging]=useState(false);
+  const handlePing=async()=>{setPinging(true);setPingResult(null);const r=await onPing();setPingResult(r);setPinging(false)};
+  const fmtDate=(iso)=>{if(!iso)return"Jamais";try{const d=new Date(iso);return d.toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}catch{return"Jamais"}};
+  const isSyncing=syncStatus==="syncing";
   return <div style={{maxWidth:480}}>
     <SectionTitle icon={Settings}>Réglages</SectionTitle>
     <BCard style={{padding:20,marginBottom:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:14}}>Valeurs par défaut</div>
@@ -428,9 +456,73 @@ function SettingsView({settings,onSave}){
         <div><Label>Tarif journalier par défaut</Label><BInput type="number" value={form.defaultDailyRate} onChange={e=>set("defaultDailyRate",e.target.value)} placeholder="350"/></div>
       </div>
     </BCard>
-    <BCard style={{padding:20,marginBottom:14}}><div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:6}}>Google Sheets (optionnel)</div>
-      <div style={{fontSize:12,color:DS.textLight,marginBottom:12}}>Connecte un Apps Script pour sync en ligne.</div>
-      <div><Label>URL de l'Apps Script</Label><BInput value={form.apiUrl||""} onChange={e=>set("apiUrl",e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></div>
+    <BCard style={{padding:20,marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <RefreshCw size={16} sw={2.5}/>
+        <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700}}>Google Sheets Sync</span>
+      </div>
+      <div style={{fontSize:12,color:DS.textLight,marginBottom:14}}>Connecte un Apps Script pour synchroniser tes données en ligne.</div>
+      <div style={{marginBottom:14}}><Label>URL de l'Apps Script</Label><BInput value={form.apiUrl||""} onChange={e=>set("apiUrl",e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/></div>
+
+      {form.apiUrl&&form.apiUrl.startsWith("https://script.google.com/")&&<>
+        {/* Ping / test connexion */}
+        <div style={{marginBottom:14}}>
+          <BBtn small onClick={handlePing} disabled={pinging} style={{fontSize:11,marginBottom:8}}>
+            <span style={{display:"flex",alignItems:"center",gap:5}}><Zap size={12} sw={2.5}/>{pinging?"Test...":"Tester la connexion"}</span>
+          </BBtn>
+          {pingResult&&<div style={{padding:"8px 12px",borderRadius:8,fontSize:12,fontFamily:"'Space Mono', monospace",
+            backgroundColor:pingResult.success?DS.accent+"25":"#FF6B5725",
+            border:`1.5px solid ${pingResult.success?DS.accent:"#FF6B57"}`,
+            color:pingResult.success?DS.accentDk:"#FF6B57"}}>
+            {pingResult.success?"Connexion OK":"Erreur : "+(pingResult.error||"Connexion échouée")}
+          </div>}
+        </div>
+
+        {/* Sync actions */}
+        <div style={{padding:14,borderRadius:10,backgroundColor:DS.bgLight,border:`1.5px dashed ${DS.textLight}60`}}>
+          <div style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textMid,marginBottom:10,letterSpacing:"0.05em"}}>Synchronisation</div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <BBtn small onClick={onPush} disabled={isSyncing} color={DS.accent} style={{flex:1,textAlign:"center",fontSize:12}}>
+              <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                {isSyncing&&syncMsg.includes("Envoi")?<RefreshCw size={13} sw={2.5} style={{animation:"spin 1s linear infinite"}}/>:<ArrowRight size={13} sw={2.5}/>}
+                Push → Sheets
+              </span>
+            </BBtn>
+            <BBtn small onClick={onPull} disabled={isSyncing} color={DS.blue} style={{flex:1,textAlign:"center",fontSize:12,color:"white"}}>
+              <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                {isSyncing&&syncMsg.includes("Récup")?<RefreshCw size={13} sw={2.5} style={{animation:"spin 1s linear infinite"}}/>:<ChevronLeft size={13} sw={2.5}/>}
+                Pull ← Sheets
+              </span>
+            </BBtn>
+          </div>
+
+          {/* Sync status */}
+          {syncStatus!=="idle"&&<div style={{padding:"8px 12px",borderRadius:8,fontSize:12,fontFamily:"'Space Mono', monospace",marginBottom:8,
+            backgroundColor:syncStatus==="success"?DS.accent+"25":syncStatus==="error"?"#FF6B5725":DS.yellow+"25",
+            border:`1.5px solid ${syncStatus==="success"?DS.accent:syncStatus==="error"?"#FF6B57":DS.yellow}`,
+            color:syncStatus==="success"?DS.accentDk:syncStatus==="error"?"#FF6B57":"#B8860B",
+            display:"flex",alignItems:"center",gap:6}}>
+            {syncStatus==="syncing"&&<RefreshCw size={12} sw={2.5} style={{animation:"spin 1s linear infinite"}}/>}
+            {syncStatus==="success"&&<Check size={12} sw={3}/>}
+            {syncStatus==="error"&&<X_ size={12} sw={3}/>}
+            {syncMsg}
+          </div>}
+
+          <div style={{fontSize:11,color:DS.textLight,display:"flex",alignItems:"center",gap:4}}>
+            <Clock size={11}/> Dernière sync : {fmtDate(lastSync)}
+          </div>
+        </div>
+
+        {/* Explications */}
+        <div style={{marginTop:14,padding:14,borderRadius:10,backgroundColor:"#FFF8E8",border:"1.5px solid #FFD23F60"}}>
+          <div style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,color:"#B8860B",marginBottom:6}}>MODE D'EMPLOI</div>
+          <div style={{fontSize:12,color:DS.textMid,lineHeight:1.5}}>
+            <b>Push</b> = envoie tes données locales vers le Google Sheet (écrase le Sheet).<br/>
+            <b>Pull</b> = récupère les données du Sheet vers ton navigateur (écrase le local).<br/>
+            <span style={{fontSize:11,color:DS.textLight}}>Astuce : fais un Push depuis ton ordi principal, puis un Pull depuis un autre appareil.</span>
+          </div>
+        </div>
+      </>}
     </BCard>
     <BBtn onClick={()=>onSave(form)} color={DS.accent} style={{width:"100%",textAlign:"center",fontSize:14,padding:"14px 0"}}><span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><Check size={16} sw={3}/> Sauvegarder</span></BBtn>
   </div>;
@@ -459,6 +551,52 @@ function FreelanceBoard(){
   const[activeJobId,setActiveJobId]=useState(null);const[paintPeriod,setPaintPeriod]=useState("full");
   const[showJobForm,setShowJobForm]=useState(false);const[editingJob,setEditingJob]=useState(null);const[sidebarCollapsed,setSidebarCollapsed]=useState(false);
 
+  /* ─── SYNC STATE ──────────────────────────────────── */
+  const[syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | success | error
+  const[syncMsg,setSyncMsg]=useState("");
+  const[lastSync,setLastSync]=useState(storage.load("lastSync",null));
+  const syncTimerRef=useRef(null);
+
+  const hasApiUrl=useCallback(()=>{
+    const url=settings.apiUrl||"";
+    return url.startsWith("https://script.google.com/");
+  },[settings.apiUrl]);
+
+  const doSync=useCallback(async(direction)=>{
+    if(!hasApiUrl())return;
+    setSyncStatus("syncing");setSyncMsg(direction==="push"?"Envoi vers Sheets...":"Récupération depuis Sheets...");
+    try{
+      if(direction==="push"){
+        const settingsToSync={...settings};delete settingsToSync.apiUrl;
+        const res=await syncApi.push(settings.apiUrl,{jobs,entries,settings:settingsToSync});
+        if(res.success===false)throw new Error(res.error||"Erreur push");
+        const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
+        setSyncStatus("success");setSyncMsg("Envoyé vers Google Sheets");
+      }else{
+        const res=await syncApi.pull(settings.apiUrl);
+        if(!res.success)throw new Error(res.error||"Erreur pull");
+        const d=res.data;
+        if(d.jobs){setJobs(d.jobs);storage.save("jobs",d.jobs)}
+        if(d.entries){setEntries(d.entries);storage.save("entries",d.entries)}
+        if(d.settings){
+          const merged={...settings,...d.settings,apiUrl:settings.apiUrl};
+          setSettings(merged);storage.save("settings",merged);
+        }
+        const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
+        setSyncStatus("success");setSyncMsg("Récupéré depuis Google Sheets");
+      }
+    }catch(err){
+      console.error("Sync error:",err);
+      setSyncStatus("error");setSyncMsg(err.message||"Erreur de sync");
+    }
+    setTimeout(()=>setSyncStatus(s=>s!=="error"?"idle":s),3000);
+  },[jobs,entries,settings,hasApiUrl]);
+
+  const doPing=useCallback(async()=>{
+    if(!hasApiUrl())return{success:false,error:"Pas d'URL configurée"};
+    try{return await syncApi.ping(settings.apiUrl)}catch(err){return{success:false,error:err.message}}
+  },[settings.apiUrl,hasApiUrl]);
+
   useEffect(()=>{setJobs(storage.load("jobs",[]));setEntries(storage.load("entries",[]));setSettings(storage.load("settings",{defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""}));setLoaded(true)},[]);
   useEffect(()=>{if(loaded)storage.save("jobs",jobs)},[jobs,loaded]);
   useEffect(()=>{if(loaded)storage.save("entries",entries)},[entries,loaded]);
@@ -482,7 +620,13 @@ function FreelanceBoard(){
         <div style={{marginLeft:"auto",cursor:"pointer",padding:4}} onClick={()=>setSidebarCollapsed(!sidebarCollapsed)}>{sidebarCollapsed?<ChevronRight size={16}/>:<ChevronLeft size={16}/>}</div>
       </div>
       <nav style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:4}}>{NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={sidebarCollapsed} onClick={()=>setView(item.key)}/>)}</nav>
-      {!sidebarCollapsed&&<div style={{padding:12,borderTop:`1.5px dashed ${DS.textLight}40`,fontSize:10,color:DS.textLight,textAlign:"center",fontFamily:"'Space Mono', monospace"}}>{jobs.length} job{jobs.length!==1?"s":""} · {entries.length} jour{entries.length!==1?"s":""}</div>}
+      {!sidebarCollapsed&&<div style={{padding:12,borderTop:`1.5px dashed ${DS.textLight}40`,fontSize:10,color:DS.textLight,textAlign:"center",fontFamily:"'Space Mono', monospace"}}>
+        {jobs.length} job{jobs.length!==1?"s":""} · {entries.length} jour{entries.length!==1?"s":""}
+        {hasApiUrl()&&<div onClick={()=>doSync("push")} title="Push vers Sheets" style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"5px 8px",borderRadius:6,cursor:"pointer",backgroundColor:syncStatus==="syncing"?DS.yellow+"30":syncStatus==="success"?DS.accent+"30":syncStatus==="error"?"#FF6B5730":DS.bgLight,border:`1.5px solid ${syncStatus==="syncing"?DS.yellow:syncStatus==="success"?DS.accent:syncStatus==="error"?"#FF6B57":DS.textLight+"40"}`,transition:"all 0.2s"}}>
+          <RefreshCw size={10} sw={2.5} style={syncStatus==="syncing"?{animation:"spin 1s linear infinite"}:{}}/>
+          <span>{syncStatus==="syncing"?"Sync...":syncStatus==="success"?"Synced":syncStatus==="error"?"Erreur":"Sync"}</span>
+        </div>}
+      </div>}
     </div>
 
     {/* Mobile Nav */}
@@ -511,7 +655,7 @@ function FreelanceBoard(){
         </div>}
         {view==="jobs"&&<JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true)}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true)}}/>}
         {view==="summary"&&<SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
-        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)}/>}
+        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)} syncStatus={syncStatus} syncMsg={syncMsg} lastSync={lastSync} onPush={()=>doSync("push")} onPull={()=>doSync("pull")} onPing={doPing} hasApiUrl={hasApiUrl}/>}
       </div>
     </div>
 
