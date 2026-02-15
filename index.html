@@ -2,12 +2,45 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>FreelanceBoard</title>
   <meta name="description" content="Outil de suivi freelance pour artiste-auteur"/>
   <meta name="theme-color" content="#F2E8D5"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="FreelanceBoard"/>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='90' height='90' x='5' y='5' rx='12' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='6'/><rect width='40' height='10' x='20' y='30' rx='3' fill='%23B8E62E'/><rect width='55' height='10' x='20' y='50' rx='3' fill='%23FFD23F'/><rect width='30' height='10' x='20' y='70' rx='3' fill='%235EBCF1'/></svg>"/>
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%23F2E8D5'/><rect width='460' height='460' x='26' y='26' rx='60' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='12'/><rect width='200' height='50' x='100' y='140' rx='12' fill='%23B8E62E'/><rect width='280' height='50' x='100' y='230' rx='12' fill='%23FFD23F'/><rect width='150' height='50' x='100' y='320' rx='12' fill='%235EBCF1'/></svg>"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <script>
+    // Inline PWA manifest
+    const manifest=JSON.stringify({
+      name:"FreelanceBoard",
+      short_name:"FB",
+      description:"Suivi freelance artiste-auteur",
+      start_url:"./",
+      display:"standalone",
+      background_color:"#F2E8D5",
+      theme_color:"#F2E8D5",
+      orientation:"any",
+      icons:[{
+        src:"data:image/svg+xml,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%23F2E8D5'/><rect width='460' height='460' x='26' y='26' rx='60' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='12'/><rect width='200' height='50' x='100' y='140' rx='12' fill='%23B8E62E'/><rect width='280' height='50' x='100' y='230' rx='12' fill='%23FFD23F'/><rect width='150' height='50' x='100' y='320' rx='12' fill='%235EBCF1'/>"),
+        sizes:"512x512",
+        type:"image/svg+xml",
+        purpose:"any"
+      }]
+    });
+    const blob=new Blob([manifest],{type:"application/json"});
+    const link=document.createElement("link");
+    link.rel="manifest";link.href=URL.createObjectURL(blob);
+    document.head.appendChild(link);
+
+    // Register service worker (needed for PWA install prompt)
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.register("./sw.js").catch(()=>{});
+    }
+  </script>
   <style>
     *{box-sizing:border-box;margin:0}body{background:#F2E8D5}
     ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#FAF4E8}::-webkit-scrollbar-thumb{background:#9B8E7E;border-radius:3px}
@@ -247,9 +280,9 @@ function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
 function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,activeJobId,jobs,onClick}){
   const[hovered,setHovered]=useState(false);const activeJob=activeJobId?jobs.find(j=>j.id===activeJobId):null;
   return <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} style={{
-    aspectRatio:"1",minHeight:48,borderRadius:8,border:isToday?`3px solid ${DS.accent}`:hasJob?DS.border2:`2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
+    aspectRatio:"1",borderRadius:8,border:isToday?`3px solid ${DS.accent}`:hasJob?DS.border2:`2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
     backgroundColor:hasJob?DS.card:weekend?"#EDE7D9":DS.bgLight,boxShadow:hasJob?DS.shadowSm:"none",
-    position:"relative",cursor:activeJobId?"pointer":"default",transition:"all 0.1s",transform:hovered&&activeJobId?"translate(-1px,-1px)":"none",overflow:"hidden"}}>
+    position:"relative",cursor:activeJobId?"pointer":"default",transition:"all 0.1s",transform:hovered&&activeJobId?"translate(-1px,-1px)":"none",overflow:"hidden",minWidth:0}}>
     <div style={{position:"absolute",top:3,left:6,fontSize:11,fontWeight:800,color:isToday?DS.accentDk:weekend?DS.textLight:DS.textMid,fontFamily:"'Space Mono', monospace"}}>{day}</div>
     {hasFull&&amJob&&<div style={{position:"absolute",inset:0,top:20,margin:3,borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&amJob&&<div style={{position:"absolute",left:3,right:3,top:20,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
@@ -276,11 +309,11 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
       <BBtn small onClick={()=>onNavigate(1)}><ChevronRight size={18}/></BBtn>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
-      {DAYS_FR.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:800,color:DS.textLight,textTransform:"uppercase",letterSpacing:"0.08em",padding:"8px 0",fontFamily:"'Space Mono', monospace"}}>{d}</div>)}
+      {DAYS_FR.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:800,color:DS.textLight,textTransform:"uppercase",letterSpacing:"0.08em",padding:"8px 0",fontFamily:"'Space Mono', monospace",minWidth:0}}>{d}</div>)}
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,overflow:"hidden"}}>
       {cells.map((day,idx)=>{
-        if(!day)return <div key={`e-${idx}`} style={{aspectRatio:"1"}}/>;
+        if(!day)return <div key={`e-${idx}`} style={{aspectRatio:"1",minWidth:0}}/>;
         const de=efd(day),hf=de.some(e=>e.period==="full"),ae=de.find(e=>e.period==="am"||e.period==="full"),pe=de.find(e=>e.period==="pm")||(hf?ae:null);
         const aj=ae?gj(ae.jobId):null,pj=pe?gj(pe.jobId):null;
         return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} activeJobId={activeJobId} jobs={jobs} onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}/>;
