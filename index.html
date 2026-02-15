@@ -12,30 +12,9 @@
   <meta name="apple-mobile-web-app-title" content="FreelanceBoard"/>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='90' height='90' x='5' y='5' rx='12' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='6'/><rect width='40' height='10' x='20' y='30' rx='3' fill='%23B8E62E'/><rect width='55' height='10' x='20' y='50' rx='3' fill='%23FFD23F'/><rect width='30' height='10' x='20' y='70' rx='3' fill='%235EBCF1'/></svg>"/>
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%23F2E8D5'/><rect width='460' height='460' x='26' y='26' rx='60' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='12'/><rect width='200' height='50' x='100' y='140' rx='12' fill='%23B8E62E'/><rect width='280' height='50' x='100' y='230' rx='12' fill='%23FFD23F'/><rect width='150' height='50' x='100' y='320' rx='12' fill='%235EBCF1'/></svg>"/>
+  <link rel="manifest" href="./manifest.json"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
   <script>
-    // Inline PWA manifest
-    const manifest=JSON.stringify({
-      name:"FreelanceBoard",
-      short_name:"FB",
-      description:"Suivi freelance artiste-auteur",
-      start_url:"./",
-      display:"standalone",
-      background_color:"#F2E8D5",
-      theme_color:"#F2E8D5",
-      orientation:"any",
-      icons:[{
-        src:"data:image/svg+xml,"+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%23F2E8D5'/><rect width='460' height='460' x='26' y='26' rx='60' fill='%23FFFBF2' stroke='%231A1A1A' stroke-width='12'/><rect width='200' height='50' x='100' y='140' rx='12' fill='%23B8E62E'/><rect width='280' height='50' x='100' y='230' rx='12' fill='%23FFD23F'/><rect width='150' height='50' x='100' y='320' rx='12' fill='%235EBCF1'/>"),
-        sizes:"512x512",
-        type:"image/svg+xml",
-        purpose:"any"
-      }]
-    });
-    const blob=new Blob([manifest],{type:"application/json"});
-    const link=document.createElement("link");
-    link.rel="manifest";link.href=URL.createObjectURL(blob);
-    document.head.appendChild(link);
-
     // Register service worker (needed for PWA install prompt)
     if("serviceWorker" in navigator){
       navigator.serviceWorker.register("./sw.js").catch(()=>{});
