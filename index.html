@@ -330,35 +330,68 @@ function YearCalendar({year,entries,jobs,onNavigateYear,onGoToMonth}){
 }
 
 /* ─── PAINT TOOLBAR ────────────────────────────────────────── */
-function PaintToolbar({jobs,activeJobId,setActiveJobId,paintPeriod,setPaintPeriod,onFillMonth,onClearMonth}){
-  const[expanded,setExpanded]=useState(true);if(!jobs.length)return null;
-  const aj=jobs.filter(j=>["confirmed","active","prospect"].includes(j.status));const dj=aj.length>0?aj:jobs;
+function PaintToolbar({jobs,entries,activeJobId,setActiveJobId,paintPeriod,setPaintPeriod,onFillMonth,onClearMonth,currentYear,currentMonth,onAddJob}){
+  if(!jobs.length)return <BCard style={{padding:20,marginBottom:14,textAlign:"center"}}>
+    <div style={{fontSize:13,color:DS.textMid,marginBottom:10,fontFamily:"'DM Sans', sans-serif"}}>Crée un job pour commencer à remplir ton calendrier</div>
+    <BBtn onClick={onAddJob} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={15}/> Nouveau job</span></BBtn>
+  </BCard>;
+
+  const pfx=`${currentYear}-${String(currentMonth+1).padStart(2,"0")}`;
+  const monthDays=(id)=>entries.filter(e=>e.jobId===id&&e.date.startsWith(pfx)).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
+
+  /* Jobs visibles = ceux qui ont des jours CE mois OU qui sont actifs */
+  const activeStatuses=["prospect","confirmed","active"];
+  const visibleJobs=jobs.filter(j=>activeStatuses.includes(j.status)||monthDays(j.id)>0);
+  const otherJobs=jobs.filter(j=>!visibleJobs.includes(j));
+  const selectedJob=activeJobId?jobs.find(j=>j.id===activeJobId):null;
+
+  const JobPill=({j})=>{
+    const sel=activeJobId===j.id;
+    const days=monthDays(j.id);
+    return <div onClick={()=>setActiveJobId(sel?null:j.id)} style={{
+      display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,cursor:"pointer",
+      backgroundColor:sel?j.color+"30":DS.bgLight,border:sel?`2.5px solid ${j.color}`:`2px solid ${DS.textLight}30`,
+      transition:"all 0.15s"}}>
+      <div style={{width:8,height:8,borderRadius:4,backgroundColor:j.color,border:"1.5px solid #1A1A1A",flexShrink:0}}/>
+      <span style={{fontSize:11,fontWeight:sel?700:500,color:sel?DS.text:DS.textMid,fontFamily:"'DM Sans', sans-serif",whiteSpace:"nowrap"}}>{j.name}</span>
+      {days>0&&<span style={{fontSize:9,fontWeight:700,color:j.color,fontFamily:"'Space Mono', monospace"}}>{days}j</span>}
+    </div>;
+  };
+
   return <BCard style={{padding:14,marginBottom:14}}>
-    <div onClick={()=>setExpanded(!expanded)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:expanded?10:0}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}><PaintBucket size={16} sw={2.5}/>
-        <span style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em"}}>Mode peinture</span>
-        {activeJobId&&<span style={{fontSize:12,color:DS.textMid,fontFamily:"'DM Sans', sans-serif"}}>{"\u2014 "}{jobs.find(j=>j.id===activeJobId)?.name}</span>}
-      </div>
-      <ChevronDown size={14} style={{color:DS.textLight,transition:"transform 0.2s",transform:expanded?"rotate(180deg)":"none"}}/>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+      <PaintBucket size={15} sw={2.5}/>
+      <span style={{fontFamily:"'Space Mono', monospace",fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em"}}>Job</span>
+      {selectedJob&&<>
+        <div style={{width:10,height:10,borderRadius:5,backgroundColor:selectedJob.color,border:"1.5px solid #1A1A1A"}}/>
+        <span style={{fontSize:13,fontWeight:700,color:DS.text,fontFamily:"'DM Sans', sans-serif"}}>{selectedJob.name}</span>
+      </>}
+      {!selectedJob&&<span style={{fontSize:12,color:DS.textLight,fontFamily:"'DM Sans', sans-serif"}}>Sélectionne un job pour peindre</span>}
     </div>
-    {expanded&&<>
-      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:activeJobId?10:0}}>
-        {dj.map(j=><BBtn key={j.id} small onClick={()=>setActiveJobId(activeJobId===j.id?null:j.id)} color={activeJobId===j.id?j.color:DS.card} style={{fontSize:11,padding:"5px 10px",color:activeJobId===j.id?"#1A1A1A":DS.textMid}}>
-          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:4,backgroundColor:j.color,border:"1.5px solid #1A1A1A",display:"inline-block"}}/>{j.name}</span>
-        </BBtn>)}
-        {activeJobId&&<BBtn small onClick={()=>setActiveJobId(null)} style={{fontSize:10,padding:"5px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><X_ size={11} sw={3}/> Désélect.</span></BBtn>}
+
+    {/* Jobs pertinents pour ce mois */}
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:otherJobs.length>0?6:0}}>
+      {visibleJobs.map(j=><JobPill key={j.id} j={j}/>)}
+    </div>
+
+    {/* Autres jobs dans un select discret */}
+    {otherJobs.length>0&&<div style={{display:"flex",alignItems:"center",gap:6}}>
+      <BSelect value={activeJobId&&otherJobs.find(j=>j.id===activeJobId)?activeJobId:""} onChange={e=>{if(e.target.value)setActiveJobId(e.target.value);}} style={{width:"auto",padding:"5px 30px 5px 10px",fontSize:11,color:DS.textLight,backgroundColor:"transparent",border:`1.5px dashed ${DS.textLight}40`,boxShadow:"none"}}>
+        <option value="">Autres jobs ({otherJobs.length})...</option>
+        {otherJobs.map(j=><option key={j.id} value={j.id}>{STATUS_FLOW.find(s=>s.key===j.status)?.icon} {j.name}</option>)}
+      </BSelect>
+    </div>}
+
+    {/* Actions */}
+    {activeJobId&&<div style={{borderTop:`1.5px dashed ${DS.textLight}30`,paddingTop:10,marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+      {[["full","Journée",Sun_],["am","Matin",Sun_],["pm","Aprem",Moon_]].map(([p,l,Ic])=>
+        <BBtn key={p} small onClick={()=>setPaintPeriod(p)} color={paintPeriod===p?DS.accent:DS.card} style={{fontSize:11,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Ic size={12} sw={2.5}/> {l}</span></BBtn>
+      )}
+      <div style={{marginLeft:"auto",display:"flex",gap:5}}>
+        <BBtn small onClick={onFillMonth} color={DS.blue} style={{fontSize:10,padding:"4px 10px",color:"white"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={11} sw={2.5}/> Remplir le mois</span></BBtn>
+        <BBtn small onClick={onClearMonth} style={{fontSize:10,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Trash2 size={11} sw={2.5}/> Vider</span></BBtn>
       </div>
-      {activeJobId&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>Appliquer:</span>
-        {[["full","Journée",Sun_],["am","Matin",Sun_],["pm","Aprem",Moon_]].map(([p,l,Ic])=>
-          <BBtn key={p} small onClick={()=>setPaintPeriod(p)} color={paintPeriod===p?DS.accent:DS.card} style={{fontSize:11,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Ic size={12} sw={2.5}/> {l}</span></BBtn>
-        )}
-        <div style={{marginLeft:"auto",display:"flex",gap:5}}>
-          <BBtn small onClick={onFillMonth} color={DS.blue} style={{fontSize:10,padding:"4px 10px",color:"white"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={11} sw={2.5}/> Remplir le mois</span></BBtn>
-          <BBtn small onClick={onClearMonth} style={{fontSize:10,padding:"4px 10px"}}><span style={{display:"flex",alignItems:"center",gap:4}}><Trash2 size={11} sw={2.5}/> Vider</span></BBtn>
-        </div>
-      </div>}
-    </>}
+    </div>}
   </BCard>;
 }
 
@@ -749,7 +782,7 @@ function FreelanceBoard(){
             {["month","year"].map(m=><BBtn key={m} small onClick={()=>setCalendarMode(m)} color={calendarMode===m?DS.accent:DS.card} style={{fontSize:11}}>{m==="month"?"Mois":"Année"}</BBtn>)}
             <BBtn small onClick={()=>{setCurrentMonth(new Date().getMonth());setCurrentYear(new Date().getFullYear())}} style={{fontSize:10}}>Aujourd'hui</BBtn>
           </div>}>Calendrier</SectionTitle>
-          {calendarMode==="month"&&<PaintToolbar jobs={jobs} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod} onFillMonth={()=>{
+          {calendarMode==="month"&&<PaintToolbar jobs={jobs} entries={entries} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod} currentYear={currentYear} currentMonth={currentMonth} onAddJob={()=>{setEditingJob(null);setShowJobForm(true)}} onFillMonth={()=>{
             if(!activeJobId)return;
             const daysInMonth=new Date(currentYear,currentMonth+1,0).getDate();
             setEntries(prev=>{
