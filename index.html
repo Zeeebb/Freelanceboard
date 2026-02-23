@@ -157,7 +157,8 @@ function normEntries(entries){
   return entries.filter(e=>e&&e.date&&e.jobId&&e.period).map(e=>({
     date:normDate(e.date),
     jobId:String(e.jobId),
-    period:String(e.period)
+    period:String(e.period),
+    note:e.note?String(e.note):""
   }));
 }
 
@@ -259,32 +260,39 @@ function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
 }
 
 /* ─── DAY CELL ─────────────────────────────────────────────── */
-function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,isOff,activeJobId,jobs,onClick}){
+function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,isOff,activeJobId,jobs,onClick,onNoteClick,note}){
   const[hovered,setHovered]=useState(false);
   const activeJob=activeJobId===OFF_JOB_ID?{color:OFF_COLOR,name:"Off"}:activeJobId?jobs.find(j=>j.id===activeJobId):null;
-  return <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} className={isOff&&!hasJob?"off-stripes":""} style={{
+  const handleClick=()=>{
+    if(activeJobId){onClick()}
+    else if(hasJob||isOff){onNoteClick&&onNoteClick()}
+  };
+  return <div onClick={handleClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} className={isOff&&!hasJob?"off-stripes":""} style={{
     aspectRatio:"1",borderRadius:8,border:isToday?`3px solid ${DS.accent}`:hasJob||isOff?DS.border2:`2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
     backgroundColor:isOff&&!hasJob?"#E5DFD1":hasJob?DS.card:weekend?"#EDE7D9":DS.bgLight,boxShadow:hasJob?DS.shadowSm:"none",
-    position:"relative",cursor:activeJobId?"pointer":"default",transition:"all 0.1s",transform:hovered&&activeJobId?"translate(-1px,-1px)":"none",overflow:"hidden",minWidth:0}}>
+    position:"relative",cursor:activeJobId?"pointer":(hasJob||isOff)?"pointer":"default",transition:"all 0.1s",transform:hovered&&(activeJobId||hasJob||isOff)?"translate(-1px,-1px)":"none",overflow:"hidden",minWidth:0}}>
     <div style={{position:"absolute",top:3,left:6,fontSize:11,fontWeight:800,color:isToday?DS.accentDk:isOff?OFF_COLOR:weekend?DS.textLight:DS.textMid,fontFamily:"'Space Mono', monospace",textDecoration:isOff?"line-through":"none"}}>{day}</div>
     {hasFull&&amJob&&<div style={{position:"absolute",inset:0,top:20,margin:3,borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&amJob&&<div style={{position:"absolute",left:3,right:3,top:20,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&pmJob&&<div style={{position:"absolute",left:3,right:3,bottom:3,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:pmJob.color,opacity:0.35}}/>}
+    {note&&<div style={{position:"absolute",left:4,right:4,bottom:isOff&&!hasJob?14:hasJob?14:4,fontSize:7,fontWeight:600,color:DS.textMid,fontFamily:"'DM Sans', sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>{note}</div>}
     {hasJob&&<div style={{position:"absolute",bottom:4,right:5,display:"flex",gap:2}}>
       {amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:amJob.color,border:"1.5px solid #1A1A1A"}}/>}
       {pmJob&&pmJob!==amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:pmJob.color,border:"1.5px solid #1A1A1A"}}/>}
     </div>}
     {isOff&&!hasJob&&<div style={{position:"absolute",bottom:3,right:5,fontSize:8,fontWeight:800,color:OFF_COLOR,fontFamily:"'Space Mono', monospace"}}>OFF</div>}
     {hovered&&activeJobId&&!hasJob&&!isOff&&activeJob&&<div style={{position:"absolute",inset:0,backgroundColor:activeJob.color,opacity:0.15,borderRadius:6}}/>}
+    {hovered&&!activeJobId&&(hasJob||isOff)&&<div style={{position:"absolute",top:2,right:3,fontSize:8,color:DS.textLight}}><Edit3 size={9} sw={2.5}/></div>}
   </div>;
 }
 
 /* ─── MONTH CAL ────────────────────────────────────────────── */
-function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggleDay,onNavigate}){
+function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggleDay,onNavigate,onSetNote}){
   const dim=getDaysInMonth(year,month),fd=getFirstDayOfMonth(year,month),today=new Date();
   const isT=(d)=>today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
   const efd=(day)=>entries.filter(e=>e.date===formatDate(year,month,day));
   const gj=(id)=>id===OFF_JOB_ID?null:jobs.find(j=>j.id===id);
+  const getNote=(day)=>{const de=efd(day);const ne=de.find(e=>e.note);return ne?ne.note:""};
   const cells=[];for(let i=0;i<fd;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
   return <div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -301,7 +309,10 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
         const de=efd(day),offE=de.some(e=>e.jobId===OFF_JOB_ID&&e.period==="full"),jobEntries=de.filter(e=>e.jobId!==OFF_JOB_ID);
         const hf=jobEntries.some(e=>e.period==="full"),ae=jobEntries.find(e=>e.period==="am"||e.period==="full"),pe=jobEntries.find(e=>e.period==="pm")||(hf?ae:null);
         const aj=ae?gj(ae.jobId):null,pj=pe?gj(pe.jobId):null;
-        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} isOff={offE} activeJobId={activeJobId} jobs={jobs} onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}/>;
+        const note=getNote(day);
+        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} isOff={offE} activeJobId={activeJobId} jobs={jobs} note={note}
+          onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}
+          onNoteClick={()=>onSetNote(formatDate(year,month,day),note)}/>;
       })}
     </div>
   </div>;
@@ -764,7 +775,7 @@ function FreelanceBoard(){
   const saveJob=(job)=>{setJobs(p=>{const i=p.findIndex(j=>j.id===job.id);if(i>=0){const n=[...p];n[i]=job;return n}return[...p,job]});setShowJobForm(false);setEditingJob(null)};
   const deleteJob=(id)=>{setJobs(p=>p.filter(j=>j.id!==id));setEntries(p=>p.filter(e=>e.jobId!==id));setShowJobForm(false);setEditingJob(null)};
   const duplicateJob=(job)=>{setJobs(p=>[...p,{...job,id:uid(),name:`${job.name} (copie)`,status:"prospect",createdAt:new Date().toISOString()}])};
-  const toggleDay=(date,jobId,period)=>{setEntries(prev=>{const ex=prev.filter(e=>e.date===date);if(period==="full"){const hf=ex.find(e=>e.jobId===jobId&&e.period==="full");if(hf)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));return[...prev.filter(e=>e.date!==date),{date,jobId,period:"full"}]}const hh=ex.find(e=>e.jobId===jobId&&e.period===period);if(hh)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period===period));let next=prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));next=next.filter(e=>!(e.date===date&&e.period===period));return[...next,{date,jobId,period}]})};
+  const toggleDay=(date,jobId,period)=>{setEntries(prev=>{const ex=prev.filter(e=>e.date===date);if(period==="full"){const hf=ex.find(e=>e.jobId===jobId&&e.period==="full");if(hf)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));return[...prev.filter(e=>e.date!==date),{date,jobId,period:"full",note:""}]}const hh=ex.find(e=>e.jobId===jobId&&e.period===period);if(hh)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period===period));let next=prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));next=next.filter(e=>!(e.date===date&&e.period===period));return[...next,{date,jobId,period,note:""}]})};
   const NAV=[{key:"calendar",label:"Calendrier",icon:Calendar},{key:"jobs",label:"Jobs",icon:Briefcase},{key:"summary",label:"Résumé",icon:BarChart3},{key:"settings",label:"Réglages",icon:Settings}];
 
   if(!loaded)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",backgroundColor:DS.bg,fontFamily:"'Space Mono', monospace"}}><BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><RefreshCw size={40} sw={2} style={{animation:"spin 1s linear infinite"}}/></div><div style={{fontSize:14,fontWeight:700}}>Chargement...</div></BCard></div>;
@@ -820,7 +831,7 @@ function FreelanceBoard(){
                   if(paintPeriod==="full")next=next.filter(e=>!(e.date===date&&e.period==="full"));
                   else next=next.filter(e=>!(e.date===date&&e.period===paintPeriod));
                 }
-                next.push({date,jobId:activeJobId,period:paintPeriod});
+                next.push({date,jobId:activeJobId,period:paintPeriod,note:""});
               }
               return next;
             });
@@ -830,7 +841,11 @@ function FreelanceBoard(){
             setEntries(prev=>prev.filter(e=>!(e.jobId===activeJobId&&e.date.startsWith(pfx))));
           }}/>}
           <BCard style={{padding:16}}>
-            {calendarMode==="month"?<MonthCalendar year={currentYear} month={currentMonth} entries={entries} jobs={jobs} activeJobId={activeJobId} paintPeriod={paintPeriod} onToggleDay={toggleDay} onNavigate={(dir)=>{let m=currentMonth+dir,y=currentYear;if(m<0){m=11;y--}if(m>11){m=0;y++}setCurrentMonth(m);setCurrentYear(y)}}/>
+            {calendarMode==="month"?<MonthCalendar year={currentYear} month={currentMonth} entries={entries} jobs={jobs} activeJobId={activeJobId} paintPeriod={paintPeriod} onToggleDay={toggleDay} onSetNote={(date,current)=>{
+              const txt=prompt("Note pour le "+date.split("-").reverse().join("/")+":",current||"");
+              if(txt===null)return;// cancelled
+              setEntries(prev=>prev.map(e=>e.date===date?{...e,note:txt||""}:e));
+            }} onNavigate={(dir)=>{let m=currentMonth+dir,y=currentYear;if(m<0){m=11;y--}if(m>11){m=0;y++}setCurrentMonth(m);setCurrentYear(y)}}/>
             :<YearCalendar year={currentYear} entries={entries} jobs={jobs} onNavigateYear={(d)=>setCurrentYear(y=>y+d)} onGoToMonth={(m)=>{setCurrentMonth(m);setCalendarMode("month")}}/>}
           </BCard>
           {jobs.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>

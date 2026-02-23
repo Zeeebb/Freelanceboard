@@ -20,7 +20,7 @@ var JOBS_HEADERS = [
   "fixedAmount", "currency", "status", "color", "poNumber",
   "notes", "startDate", "endDate", "createdAt"
 ];
-var CALENDAR_HEADERS = ["date", "jobId", "period"];
+var CALENDAR_HEADERS = ["date", "jobId", "period", "note"];
 var SETTINGS_HEADERS = ["key", "value"];
 
 var NUMERIC_FIELDS = ["dailyRate", "fixedAmount"];
