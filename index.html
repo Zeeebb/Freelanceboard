@@ -24,6 +24,7 @@
     *{box-sizing:border-box;margin:0}body{background:#F2E8D5}
     ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#FAF4E8}::-webkit-scrollbar-thumb{background:#9B8E7E;border-radius:3px}
     @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+    .off-stripes{background:repeating-linear-gradient(135deg,transparent,transparent 3px,#9B8E7E30 3px,#9B8E7E30 6px)!important}
     @media(max-width:768px){.dsb{display:none!important}.mnv{display:flex!important}}
     @media(min-width:769px){.dsb{display:flex!important}.mnv{display:none!important}}
   </style>
@@ -128,6 +129,8 @@ const parseDate=(s)=>{const[y,m,d]=s.split("-").map(Number);return{year:y,month:
 const formatMoney=(a,c="EUR")=>{try{return new Intl.NumberFormat("fr-FR",{style:"currency",currency:c}).format(a)}catch{return`${a.toFixed(2)} ${c}`}};
 const isWeekend=(y,m,d)=>{const x=new Date(y,m,d).getDay();return x===0||x===6};
 const FALLBACK_RATES={USD:0.92,GBP:1.17,CAD:0.68,CHF:1.05,JPY:0.0062,AUD:0.60,SEK:0.088,NOK:0.086,DKK:0.134,EUR:1};
+const OFF_JOB_ID="__off__";
+const OFF_COLOR="#9B8E7E";
 
 /* ─── STORAGE (localStorage) ───────────────────────────────── */
 const storage={
@@ -256,13 +259,14 @@ function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
 }
 
 /* ─── DAY CELL ─────────────────────────────────────────────── */
-function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,activeJobId,jobs,onClick}){
-  const[hovered,setHovered]=useState(false);const activeJob=activeJobId?jobs.find(j=>j.id===activeJobId):null;
-  return <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} style={{
-    aspectRatio:"1",borderRadius:8,border:isToday?`3px solid ${DS.accent}`:hasJob?DS.border2:`2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
-    backgroundColor:hasJob?DS.card:weekend?"#EDE7D9":DS.bgLight,boxShadow:hasJob?DS.shadowSm:"none",
+function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,isOff,activeJobId,jobs,onClick}){
+  const[hovered,setHovered]=useState(false);
+  const activeJob=activeJobId===OFF_JOB_ID?{color:OFF_COLOR,name:"Off"}:activeJobId?jobs.find(j=>j.id===activeJobId):null;
+  return <div onClick={onClick} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} className={isOff&&!hasJob?"off-stripes":""} style={{
+    aspectRatio:"1",borderRadius:8,border:isToday?`3px solid ${DS.accent}`:hasJob||isOff?DS.border2:`2px solid ${weekend?"#E5DFD1":"#DDD7C8"}`,
+    backgroundColor:isOff&&!hasJob?"#E5DFD1":hasJob?DS.card:weekend?"#EDE7D9":DS.bgLight,boxShadow:hasJob?DS.shadowSm:"none",
     position:"relative",cursor:activeJobId?"pointer":"default",transition:"all 0.1s",transform:hovered&&activeJobId?"translate(-1px,-1px)":"none",overflow:"hidden",minWidth:0}}>
-    <div style={{position:"absolute",top:3,left:6,fontSize:11,fontWeight:800,color:isToday?DS.accentDk:weekend?DS.textLight:DS.textMid,fontFamily:"'Space Mono', monospace"}}>{day}</div>
+    <div style={{position:"absolute",top:3,left:6,fontSize:11,fontWeight:800,color:isToday?DS.accentDk:isOff?OFF_COLOR:weekend?DS.textLight:DS.textMid,fontFamily:"'Space Mono', monospace",textDecoration:isOff?"line-through":"none"}}>{day}</div>
     {hasFull&&amJob&&<div style={{position:"absolute",inset:0,top:20,margin:3,borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&amJob&&<div style={{position:"absolute",left:3,right:3,top:20,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&pmJob&&<div style={{position:"absolute",left:3,right:3,bottom:3,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:pmJob.color,opacity:0.35}}/>}
@@ -270,7 +274,8 @@ function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,activeJobId,job
       {amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:amJob.color,border:"1.5px solid #1A1A1A"}}/>}
       {pmJob&&pmJob!==amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:pmJob.color,border:"1.5px solid #1A1A1A"}}/>}
     </div>}
-    {hovered&&activeJobId&&!hasJob&&activeJob&&<div style={{position:"absolute",inset:0,backgroundColor:activeJob.color,opacity:0.15,borderRadius:6}}/>}
+    {isOff&&!hasJob&&<div style={{position:"absolute",bottom:3,right:5,fontSize:8,fontWeight:800,color:OFF_COLOR,fontFamily:"'Space Mono', monospace"}}>OFF</div>}
+    {hovered&&activeJobId&&!hasJob&&!isOff&&activeJob&&<div style={{position:"absolute",inset:0,backgroundColor:activeJob.color,opacity:0.15,borderRadius:6}}/>}
   </div>;
 }
 
@@ -279,7 +284,7 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
   const dim=getDaysInMonth(year,month),fd=getFirstDayOfMonth(year,month),today=new Date();
   const isT=(d)=>today.getFullYear()===year&&today.getMonth()===month&&today.getDate()===d;
   const efd=(day)=>entries.filter(e=>e.date===formatDate(year,month,day));
-  const gj=(id)=>jobs.find(j=>j.id===id);
+  const gj=(id)=>id===OFF_JOB_ID?null:jobs.find(j=>j.id===id);
   const cells=[];for(let i=0;i<fd;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
   return <div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -293,9 +298,10 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,overflow:"hidden"}}>
       {cells.map((day,idx)=>{
         if(!day)return <div key={`e-${idx}`} style={{aspectRatio:"1",minWidth:0}}/>;
-        const de=efd(day),hf=de.some(e=>e.period==="full"),ae=de.find(e=>e.period==="am"||e.period==="full"),pe=de.find(e=>e.period==="pm")||(hf?ae:null);
+        const de=efd(day),offE=de.some(e=>e.jobId===OFF_JOB_ID&&e.period==="full"),jobEntries=de.filter(e=>e.jobId!==OFF_JOB_ID);
+        const hf=jobEntries.some(e=>e.period==="full"),ae=jobEntries.find(e=>e.period==="am"||e.period==="full"),pe=jobEntries.find(e=>e.period==="pm")||(hf?ae:null);
         const aj=ae?gj(ae.jobId):null,pj=pe?gj(pe.jobId):null;
-        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} activeJobId={activeJobId} jobs={jobs} onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}/>;
+        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} isOff={offE} activeJobId={activeJobId} jobs={jobs} onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}/>;
       })}
     </div>
   </div>;
@@ -303,7 +309,7 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
 
 /* ─── YEAR CAL ─────────────────────────────────────────────── */
 function YearCalendar({year,entries,jobs,onNavigateYear,onGoToMonth}){
-  const gj=(id)=>jobs.find(j=>j.id===id);
+  const gj=(id)=>id===OFF_JOB_ID?{color:OFF_COLOR}:jobs.find(j=>j.id===id);
   return <div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
       <BBtn small onClick={()=>onNavigateYear(-1)}><ChevronLeft size={18}/></BBtn>
@@ -338,12 +344,13 @@ function PaintToolbar({jobs,entries,activeJobId,setActiveJobId,paintPeriod,setPa
 
   const pfx=`${currentYear}-${String(currentMonth+1).padStart(2,"0")}`;
   const monthDays=(id)=>entries.filter(e=>e.jobId===id&&e.date.startsWith(pfx)).reduce((s,e)=>s+(e.period==="full"?1:0.5),0);
+  const offDays=monthDays(OFF_JOB_ID);
 
   /* Jobs visibles = ceux qui ont des jours CE mois OU qui sont actifs */
   const activeStatuses=["prospect","confirmed","active"];
   const visibleJobs=jobs.filter(j=>activeStatuses.includes(j.status)||monthDays(j.id)>0);
   const otherJobs=jobs.filter(j=>!visibleJobs.includes(j));
-  const selectedJob=activeJobId?jobs.find(j=>j.id===activeJobId):null;
+  const selectedJob=activeJobId===OFF_JOB_ID?{id:OFF_JOB_ID,name:"Off / Vacances",color:OFF_COLOR}:activeJobId?jobs.find(j=>j.id===activeJobId):null;
 
   const JobPill=({j})=>{
     const sel=activeJobId===j.id;
@@ -367,6 +374,18 @@ function PaintToolbar({jobs,entries,activeJobId,setActiveJobId,paintPeriod,setPa
         <span style={{fontSize:13,fontWeight:700,color:DS.text,fontFamily:"'DM Sans', sans-serif"}}>{selectedJob.name}</span>
       </>}
       {!selectedJob&&<span style={{fontSize:12,color:DS.textLight,fontFamily:"'DM Sans', sans-serif"}}>Sélectionne un job pour peindre</span>}
+    </div>
+
+    {/* Off button - always visible */}
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+      <div onClick={()=>setActiveJobId(activeJobId===OFF_JOB_ID?null:OFF_JOB_ID)} style={{
+        display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:8,cursor:"pointer",
+        backgroundColor:activeJobId===OFF_JOB_ID?OFF_COLOR+"30":DS.bgLight,border:activeJobId===OFF_JOB_ID?`2.5px solid ${OFF_COLOR}`:`2px dashed ${DS.textLight}50`,
+        transition:"all 0.15s"}}>
+        <X_ size={10} sw={3} color={OFF_COLOR}/>
+        <span style={{fontSize:11,fontWeight:activeJobId===OFF_JOB_ID?700:500,color:activeJobId===OFF_JOB_ID?OFF_COLOR:DS.textLight,fontFamily:"'DM Sans', sans-serif"}}>Off / Vacances</span>
+        {offDays>0&&<span style={{fontSize:9,fontWeight:700,color:OFF_COLOR,fontFamily:"'Space Mono', monospace"}}>{offDays}j</span>}
+      </div>
     </div>
 
     {/* Jobs pertinents pour ce mois */}
@@ -759,7 +778,8 @@ function FreelanceBoard(){
       </div>
       <nav style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:4}}>{NAV.map(item=><NavBtn key={item.key} item={item} active={view===item.key} collapsed={sidebarCollapsed} onClick={()=>setView(item.key)}/>)}</nav>
       {!sidebarCollapsed&&<div style={{padding:12,borderTop:`1.5px dashed ${DS.textLight}40`,fontSize:10,color:DS.textLight,textAlign:"center",fontFamily:"'Space Mono', monospace"}}>
-        {jobs.length} job{jobs.length!==1?"s":""} · {entries.length} jour{entries.length!==1?"s":""}
+        {jobs.length} job{jobs.length!==1?"s":""} · {entries.filter(e=>e.jobId!==OFF_JOB_ID).length} jour{entries.filter(e=>e.jobId!==OFF_JOB_ID).length!==1?"s":""}
+        {entries.some(e=>e.jobId===OFF_JOB_ID)&&<span> · {entries.filter(e=>e.jobId===OFF_JOB_ID).length} off</span>}
         <div title={syncStatus==="syncing"?"Synchronisation...":syncStatus==="success"?"Synchronisé":syncStatus==="error"?"Erreur de sync":"Sync auto activée"} style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"5px 8px",borderRadius:6,backgroundColor:syncStatus==="syncing"?DS.yellow+"30":syncStatus==="success"?DS.accent+"30":syncStatus==="error"?"#FF6B5730":DS.bgLight,border:`1.5px solid ${syncStatus==="syncing"?DS.yellow:syncStatus==="success"?DS.accent:syncStatus==="error"?"#FF6B57":DS.textLight+"40"}`,transition:"all 0.3s"}}>
           <RefreshCw size={10} sw={2.5} style={syncStatus==="syncing"?{animation:"spin 1s linear infinite"}:{}}/>
           <span>{syncStatus==="syncing"?"Sync...":syncStatus==="success"?"Synced":syncStatus==="error"?"Erreur":"Auto-sync"}</span>
@@ -785,17 +805,21 @@ function FreelanceBoard(){
           {calendarMode==="month"&&<PaintToolbar jobs={jobs} entries={entries} activeJobId={activeJobId} setActiveJobId={setActiveJobId} paintPeriod={paintPeriod} setPaintPeriod={setPaintPeriod} currentYear={currentYear} currentMonth={currentMonth} onAddJob={()=>{setEditingJob(null);setShowJobForm(true)}} onFillMonth={()=>{
             if(!activeJobId)return;
             const daysInMonth=new Date(currentYear,currentMonth+1,0).getDate();
+            const isOff=activeJobId===OFF_JOB_ID;
             setEntries(prev=>{
               let next=[...prev];
               for(let d=1;d<=daysInMonth;d++){
                 const dow=new Date(currentYear,currentMonth,d).getDay();
-                if(dow===0||dow===6)continue;// skip weekends
+                if(dow===0||dow===6)continue;
                 const date=formatDate(currentYear,currentMonth,d);
-                // Remove existing entries for this date+job
-                next=next.filter(e=>!(e.date===date&&e.jobId===activeJobId));
-                // Remove conflicting full-day entries from other jobs if painting full
-                if(paintPeriod==="full")next=next.filter(e=>!(e.date===date&&e.period==="full"));
-                else next=next.filter(e=>!(e.date===date&&e.period===paintPeriod));
+                if(isOff&&paintPeriod==="full"){
+                  // Off full day: remove ALL entries for this date
+                  next=next.filter(e=>e.date!==date);
+                }else{
+                  next=next.filter(e=>!(e.date===date&&e.jobId===activeJobId));
+                  if(paintPeriod==="full")next=next.filter(e=>!(e.date===date&&e.period==="full"));
+                  else next=next.filter(e=>!(e.date===date&&e.period===paintPeriod));
+                }
                 next.push({date,jobId:activeJobId,period:paintPeriod});
               }
               return next;
@@ -811,6 +835,7 @@ function FreelanceBoard(){
           </BCard>
           {jobs.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12}}>
             {jobs.filter(j=>entries.some(e=>e.jobId===j.id)).map(j=><div key={j.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,backgroundColor:j.color+"25",border:`1.5px solid ${j.color}`}}><div style={{width:8,height:8,borderRadius:3,backgroundColor:j.color,border:"1px solid #1A1A1A"}}/>{j.name}</div>)}
+            {entries.some(e=>e.jobId===OFF_JOB_ID)&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,backgroundColor:OFF_COLOR+"25",border:`1.5px dashed ${OFF_COLOR}`}}><X_ size={10} sw={3} color={OFF_COLOR}/> Off</div>}
           </div>}
         </div>}
         {view==="jobs"&&<JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true)}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true)}}/>}
