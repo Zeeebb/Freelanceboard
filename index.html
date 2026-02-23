@@ -260,9 +260,10 @@ function JobForm({job,jobs,onSave,onClose,onDelete,clients}){
 }
 
 /* ─── DAY CELL ─────────────────────────────────────────────── */
-function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,isOff,activeJobId,jobs,onClick,onNoteClick,note}){
+function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,isOff,activeJobId,jobs,onClick,onNoteClick,note,groupLabel}){
   const[hovered,setHovered]=useState(false);
   const activeJob=activeJobId===OFF_JOB_ID?{color:OFF_COLOR,name:"Off"}:activeJobId?jobs.find(j=>j.id===activeJobId):null;
+  const mainColor=amJob?amJob.color:isOff?OFF_COLOR:null;
   const handleClick=()=>{
     if(activeJobId){onClick()}
     else if(hasJob||isOff){onNoteClick&&onNoteClick()}
@@ -275,14 +276,17 @@ function DayCell({day,isToday,weekend,hasFull,amJob,pmJob,hasJob,isOff,activeJob
     {hasFull&&amJob&&<div style={{position:"absolute",inset:0,top:20,margin:3,borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&amJob&&<div style={{position:"absolute",left:3,right:3,top:20,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:amJob.color,opacity:0.35}}/>}
     {!hasFull&&pmJob&&<div style={{position:"absolute",left:3,right:3,bottom:3,height:"calc(50% - 14px)",borderRadius:4,backgroundColor:pmJob.color,opacity:0.35}}/>}
-    {note&&<div style={{position:"absolute",left:4,right:4,bottom:isOff&&!hasJob?14:hasJob?14:4,fontSize:7,fontWeight:600,color:DS.textMid,fontFamily:"'DM Sans', sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>{note}</div>}
+    {groupLabel&&<div style={{position:"absolute",top:2,right:3,fontSize:7,fontWeight:800,color:mainColor||DS.textMid,fontFamily:"'Space Mono', monospace",maxWidth:"calc(100% - 28px)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2,opacity:0.75}}>{groupLabel}</div>}
+    {note&&<div style={{position:"absolute",left:3,right:3,bottom:hasJob?14:isOff?14:3,overflow:"hidden"}}>
+      <div style={{fontSize:8,fontWeight:700,color:DS.text,fontFamily:"'DM Sans', sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3,backgroundColor:"#FFD23F90",borderRadius:2,padding:"1px 3px"}}>{note}</div>
+    </div>}
     {hasJob&&<div style={{position:"absolute",bottom:4,right:5,display:"flex",gap:2}}>
       {amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:amJob.color,border:"1.5px solid #1A1A1A"}}/>}
       {pmJob&&pmJob!==amJob&&<div style={{width:6,height:6,borderRadius:"50%",backgroundColor:pmJob.color,border:"1.5px solid #1A1A1A"}}/>}
     </div>}
     {isOff&&!hasJob&&<div style={{position:"absolute",bottom:3,right:5,fontSize:8,fontWeight:800,color:OFF_COLOR,fontFamily:"'Space Mono', monospace"}}>OFF</div>}
     {hovered&&activeJobId&&!hasJob&&!isOff&&activeJob&&<div style={{position:"absolute",inset:0,backgroundColor:activeJob.color,opacity:0.15,borderRadius:6}}/>}
-    {hovered&&!activeJobId&&(hasJob||isOff)&&<div style={{position:"absolute",top:2,right:3,fontSize:8,color:DS.textLight}}><Edit3 size={9} sw={2.5}/></div>}
+    {hovered&&!activeJobId&&(hasJob||isOff)&&<div style={{position:"absolute",top:2,right:groupLabel?undefined:3,left:groupLabel?6:undefined,fontSize:8,color:DS.textLight}}><Edit3 size={9} sw={2.5}/></div>}
   </div>;
 }
 
@@ -293,6 +297,39 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
   const efd=(day)=>entries.filter(e=>e.date===formatDate(year,month,day));
   const gj=(id)=>id===OFF_JOB_ID?null:jobs.find(j=>j.id===id);
   const getNote=(day)=>{const de=efd(day);const ne=de.find(e=>e.note);return ne?ne.note:""};
+
+  /* Precompute main jobId per day (full > am > off) */
+  const dayMainJob=useMemo(()=>{
+    const map={};
+    for(let d=1;d<=dim;d++){
+      const de=efd(d);
+      const je=de.filter(e=>e.jobId!==OFF_JOB_ID);
+      const full=je.find(e=>e.period==="full");
+      const am=je.find(e=>e.period==="am");
+      if(full)map[d]=full.jobId;
+      else if(am)map[d]=am.jobId;
+      else if(de.some(e=>e.jobId===OFF_JOB_ID))map[d]=OFF_JOB_ID;
+      else map[d]=null;
+    }
+    return map;
+  },[entries,year,month]);
+
+  /* Determine if day is first of a consecutive group for its main job */
+  const isGroupFirst=(day)=>{
+    const jid=dayMainJob[day];
+    if(!jid)return false;
+    if(day===1)return true;
+    return dayMainJob[day-1]!==jid;
+  };
+
+  /* Short label for job name */
+  const jobLabel=(jid)=>{
+    if(jid===OFF_JOB_ID)return"OFF";
+    const j=jobs.find(x=>x.id===jid);
+    if(!j)return"";
+    return j.name.length<=10?j.name:j.name.split(/[\s-_]+/).map(w=>w[0]).join("").toUpperCase().slice(0,5);
+  };
+
   const cells=[];for(let i=0;i<fd;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
   return <div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -310,7 +347,9 @@ function MonthCalendar({year,month,entries,jobs,activeJobId,paintPeriod,onToggle
         const hf=jobEntries.some(e=>e.period==="full"),ae=jobEntries.find(e=>e.period==="am"||e.period==="full"),pe=jobEntries.find(e=>e.period==="pm")||(hf?ae:null);
         const aj=ae?gj(ae.jobId):null,pj=pe?gj(pe.jobId):null;
         const note=getNote(day);
-        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} isOff={offE} activeJobId={activeJobId} jobs={jobs} note={note}
+        const gf=isGroupFirst(day);
+        const label=gf?jobLabel(dayMainJob[day]):"";
+        return <DayCell key={day} day={day} isToday={isT(day)} weekend={isWeekend(year,month,day)} hasFull={hf} amJob={aj} pmJob={pj} hasJob={!!(aj||pj)} isOff={offE} activeJobId={activeJobId} jobs={jobs} note={note} groupLabel={label}
           onClick={()=>activeJobId&&onToggleDay(formatDate(year,month,day),activeJobId,paintPeriod)}
           onNoteClick={()=>onSetNote(formatDate(year,month,day),note)}/>;
       })}
