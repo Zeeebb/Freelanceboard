@@ -260,3 +260,40 @@ function initSheet() {
 
   console.log("FreelanceBoard v2 initialisé (format Texte brut).");
 }
+
+/**
+ * Pré-remplit l'onglet Schedule avec l'échéancier 2026.
+ * À lancer UNE SEULE FOIS après initSheet().
+ */
+function initScheduleData() {
+  var data = [
+    {id:"u-t1",organism:"URSSAF",label:"Provisions T1 (revenus 2024)",date:"2026-01-15",amount:2148,paid:"true"},
+    {id:"u-t2",organism:"URSSAF",label:"Provisions T2 (revenus 2024)",date:"2026-04-15",amount:2148,paid:"false"},
+    {id:"u-t3",organism:"URSSAF",label:"Provisions T3",date:"2026-07-15",amount:2148,paid:"false"},
+    {id:"u-reg",organism:"URSSAF",label:"Régularisation revenus 2025",date:"2026-07-15",amount:-996,paid:"false"},
+    {id:"u-t4",organism:"URSSAF",label:"Provisions T4",date:"2026-10-15",amount:2148,paid:"false"},
+    {id:"i-t3",organism:"IRCEC",label:"Provisions T3",date:"2026-07-15",amount:1620.5,paid:"false"},
+    {id:"i-t4",organism:"IRCEC",label:"Provisions T4",date:"2026-10-15",amount:1620.5,paid:"false"},
+    {id:"i-2025",organism:"IRCEC",label:"Cotisations revenus 2025",date:"2026-09-30",amount:3722,paid:"false"},
+    {id:"ir-feb",organism:"Impôts",label:"Impôt sur le revenu — Fév",date:"2026-02-16",amount:244,paid:"true"},
+    {id:"ir-mar",organism:"Impôts",label:"Impôt sur le revenu — Mar",date:"2026-03-16",amount:122,paid:"false"},
+    {id:"ir-apr",organism:"Impôts",label:"Impôt sur le revenu — Avr",date:"2026-04-15",amount:122,paid:"false"},
+    {id:"ir-may",organism:"Impôts",label:"Impôt sur le revenu — Mai",date:"2026-05-15",amount:122,paid:"false"},
+    {id:"ir-jun",organism:"Impôts",label:"Impôt sur le revenu — Jun",date:"2026-06-15",amount:122,paid:"false"},
+    {id:"ir-jul",organism:"Impôts",label:"Impôt sur le revenu — Jul",date:"2026-07-15",amount:122,paid:"false"},
+    {id:"ir-aug",organism:"Impôts",label:"Impôt sur le revenu — Aoû",date:"2026-08-17",amount:122,paid:"false"},
+    {id:"ir-sep",organism:"Impôts",label:"Impôt sur le revenu — Sep",date:"2026-09-15",amount:122,paid:"false"},
+    {id:"ir-oct",organism:"Impôts",label:"Impôt sur le revenu — Oct",date:"2026-10-15",amount:122,paid:"false"},
+    {id:"ir-fev",organism:"Impôts",label:"IR mensuel — Février",date:"2026-02-16",amount:244,paid:"true"},
+    {id:"ir-mar",organism:"Impôts",label:"IR mensuel — Mars",date:"2026-03-16",amount:122,paid:"true"},
+    {id:"ir-avr",organism:"Impôts",label:"IR mensuel — Avril",date:"2026-04-15",amount:122,paid:"false"},
+    {id:"ir-mai",organism:"Impôts",label:"IR mensuel — Mai",date:"2026-05-15",amount:122,paid:"false"},
+    {id:"ir-jun",organism:"Impôts",label:"IR mensuel — Juin",date:"2026-06-15",amount:122,paid:"false"},
+    {id:"ir-jul",organism:"Impôts",label:"IR mensuel — Juillet",date:"2026-07-15",amount:122,paid:"false"},
+    {id:"ir-aou",organism:"Impôts",label:"IR mensuel — Août",date:"2026-08-17",amount:122,paid:"false"},
+    {id:"ir-sep",organism:"Impôts",label:"IR mensuel — Septembre",date:"2026-09-15",amount:122,paid:"false"},
+    {id:"ir-oct",organism:"Impôts",label:"IR mensuel — Octobre",date:"2026-10-15",amount:122,paid:"false"}
+  ];
+  arrayToSheet(SHEET_NAMES.schedule, SCHEDULE_HEADERS, data);
+  console.log("Échéancier 2026 pré-rempli (" + data.length + " échéances).");
+}

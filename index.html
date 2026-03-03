@@ -779,7 +779,7 @@ function EcheancierView({schedule,setSchedule,jobs,entries,rates,year}){
   const xPos=(i)=>pad.l+i*(innerW/12)+innerW/24;
   const yPos=(v)=>pad.t+innerH-(v/maxVal)*innerH;
 
-  const orgColors={"URSSAF":"#5EBCF1","IRCEC":"#C49BFF"};
+  const orgColors={"URSSAF":"#5EBCF1","IRCEC":"#C49BFF","Impôts":"#FFD23F"};
   const nextDue=sorted.find(i=>!i.paid);
   const today=formatDate(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
 
