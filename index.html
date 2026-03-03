@@ -71,6 +71,7 @@ const ChevronDown=mkI(["M6 9l6 6 6-6"]);
 const Check=mkI(["M20 6L9 17l-5-5"]);
 const X_=mkI([{l:[18,6,6,18]},{l:[6,6,18,18]}]);
 const DollarSign=mkI([{l:[12,2,12,22]},"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"]);
+const Wallet=mkI(["M21 12V7H5a2 2 0 0 1 0-4h14v4","M3 5v14a2 2 0 0 0 2 2h16v-5","M18 12a1 1 0 0 0 0 2h2a1 1 0 0 0 0-2h-2"]);
 const Clock=mkI([{c:[12,12,10]},"M12 6v6l4 2"]);
 const Users=mkI(["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",{c:[9,7,4]},"M22 21v-2a4 4 0 0 0-3-3.87","M16 3.13a4 4 0 0 1 0 7.75"]);
 const FileText=mkI(["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z","M14 2v6h6",{l:[16,13,8,13]},{l:[16,17,8,17]},{l:[10,9,8,9]}]);
@@ -724,9 +725,197 @@ function NavBtn({item,active,collapsed,onClick,mobile}){
   </div>;
 }
 
+/* ─── ECHEANCIER VIEW ──────────────────────────────────────── */
+function EcheancierView({schedule,setSchedule,jobs,entries,rates,year}){
+  const[showForm,setShowForm]=useState(false);
+  const[editItem,setEditItem]=useState(null);
+
+  const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
+  const totalDue=schedule.reduce((s,i)=>s+i.amount,0);
+  const totalPaid=schedule.filter(i=>i.paid).reduce((s,i)=>s+i.amount,0);
+  const totalLeft=totalDue-totalPaid;
+  const sorted=[...schedule].sort((a,b)=>a.date.localeCompare(b.date));
+
+  /* CA par mois depuis les jobs */
+  const monthlyCA=useMemo(()=>{
+    const m=Array(12).fill(0);
+    entries.filter(e=>e.jobId!==OFF_JOB_ID&&e.date.startsWith(String(year))).forEach(e=>{
+      const mi=parseInt(e.date.split("-")[1],10)-1;
+      const j=jobs.find(x=>x.id===e.jobId);
+      if(!j)return;
+      const dayVal=j.type==="daily"?j.dailyRate*(e.period==="full"?1:0.5):0;
+      m[mi]+=te(dayVal,j.currency);
+    });
+    // Forfaits: répartis sur le mois de la 1ère entrée
+    const fixedCounted=new Set();
+    jobs.filter(j=>j.type==="fixed").forEach(j=>{
+      if(fixedCounted.has(j.id))return;
+      const fe=entries.find(e=>e.jobId===j.id&&e.date.startsWith(String(year)));
+      if(fe){const mi=parseInt(fe.date.split("-")[1],10)-1;m[mi]+=te(j.fixedAmount,j.currency);fixedCounted.add(j.id)}
+    });
+    return m;
+  },[entries,jobs,rates,year]);
+
+  /* Charges par mois depuis l'échéancier */
+  const monthlyCharges=useMemo(()=>{
+    const m=Array(12).fill(0);
+    schedule.filter(i=>i.date.startsWith(String(year))).forEach(i=>{
+      const mi=parseInt(i.date.split("-")[1],10)-1;
+      m[mi]+=i.amount;
+    });
+    return m;
+  },[schedule,year]);
+
+  /* Cumulatifs */
+  const cumCA=monthlyCA.reduce((a,v,i)=>{a.push((a[i-1]||0)+v);return a},[]);
+  const cumCharges=monthlyCharges.reduce((a,v,i)=>{a.push((a[i-1]||0)+v);return a},[]);
+  const cumNet=cumCA.map((v,i)=>v-cumCharges[i]);
+  const maxVal=Math.max(...cumCA,...cumCharges,1);
+
+  /* Chart */
+  const chartH=220,chartW=600,pad={t:20,r:20,b:30,l:60};
+  const innerW=chartW-pad.l-pad.r,innerH=chartH-pad.t-pad.b;
+  const barW=innerW/12*0.35;
+  const xPos=(i)=>pad.l+i*(innerW/12)+innerW/24;
+  const yPos=(v)=>pad.t+innerH-(v/maxVal)*innerH;
+
+  const orgColors={"URSSAF":"#5EBCF1","IRCEC":"#C49BFF"};
+  const nextDue=sorted.find(i=>!i.paid);
+  const today=formatDate(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+
+  /* Form state */
+  const[form,setForm]=useState({organism:"URSSAF",label:"",date:"",amount:""});
+  const openAdd=()=>{setEditItem(null);setForm({organism:"URSSAF",label:"",date:"",amount:""});setShowForm(true)};
+  const openEdit=(item)=>{setEditItem(item);setForm({organism:item.organism,label:item.label,date:item.date,amount:item.amount});setShowForm(true)};
+  const saveForm=()=>{
+    if(!form.label||!form.date||!form.amount)return;
+    if(editItem){
+      setSchedule(prev=>prev.map(i=>i.id===editItem.id?{...i,...form,amount:parseFloat(form.amount)}:i));
+    }else{
+      setSchedule(prev=>[...prev,{id:uid(),organism:form.organism,label:form.label,date:form.date,amount:parseFloat(form.amount),paid:false}]);
+    }
+    setShowForm(false);
+  };
+
+  return <div>
+    <SectionTitle icon={Wallet} right={<BBtn onClick={openAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Ajouter</span></BBtn>}>Échéancier {year}</SectionTitle>
+
+    {/* Summary cards */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:16}}>
+      <BCard style={{padding:16,borderLeft:`6px solid #FF7A3D`}}>
+        <div style={{fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textLight,fontFamily:"'Space Mono', monospace",marginBottom:4}}>Total charges</div>
+        <div style={{fontSize:22,fontWeight:700,fontFamily:"'Space Mono', monospace"}}>{formatMoney(totalDue,"EUR")}</div>
+      </BCard>
+      <BCard style={{padding:16,borderLeft:`6px solid ${DS.accent}`}}>
+        <div style={{fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textLight,fontFamily:"'Space Mono', monospace",marginBottom:4}}>Déjà payé</div>
+        <div style={{fontSize:22,fontWeight:700,fontFamily:"'Space Mono', monospace",color:DS.accentDk}}>{formatMoney(totalPaid,"EUR")}</div>
+      </BCard>
+      <BCard style={{padding:16,borderLeft:`6px solid ${totalLeft>0?"#FF6B57":"#B8E62E"}`}}>
+        <div style={{fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textLight,fontFamily:"'Space Mono', monospace",marginBottom:4}}>Reste à payer</div>
+        <div style={{fontSize:22,fontWeight:700,fontFamily:"'Space Mono', monospace",color:totalLeft>0?"#FF6B57":"#B8E62E"}}>{formatMoney(totalLeft,"EUR")}</div>
+      </BCard>
+      {nextDue&&<BCard style={{padding:16,borderLeft:`6px solid ${DS.yellow}`}}>
+        <div style={{fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textLight,fontFamily:"'Space Mono', monospace",marginBottom:4}}>Prochaine échéance</div>
+        <div style={{fontSize:13,fontWeight:700,fontFamily:"'Space Mono', monospace"}}>{formatMoney(nextDue.amount,"EUR")}</div>
+        <div style={{fontSize:11,color:DS.textMid,marginTop:2}}>{nextDue.label} — {nextDue.date.split("-").reverse().join("/")}</div>
+      </BCard>}
+    </div>
+
+    {/* Chart: CA cumulé vs Charges cumulées */}
+    <BCard style={{padding:16,marginBottom:16}}>
+      <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+        <BarChart3 size={14} sw={2.5}/> CA vs Charges (cumulé)
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <svg viewBox={`0 0 ${chartW} ${chartH}`} style={{width:"100%",maxWidth:chartW,height:"auto"}}>
+          {/* Y axis labels */}
+          {[0,0.25,0.5,0.75,1].map(p=>{const v=maxVal*p;return <g key={p}>
+            <line x1={pad.l} y1={yPos(v)} x2={chartW-pad.r} y2={yPos(v)} stroke={DS.textLight+"40"} strokeDasharray="4"/>
+            <text x={pad.l-8} y={yPos(v)+4} textAnchor="end" fontSize="9" fill={DS.textLight} fontFamily="Space Mono">{v>=1000?(v/1000).toFixed(0)+"k":v.toFixed(0)}</text>
+          </g>})}
+          {/* Bars: charges */}
+          {monthlyCharges.map((v,i)=>v>0?<rect key={`ch-${i}`} x={xPos(i)-barW} y={yPos(v)} width={barW} height={Math.max(0,yPos(0)-yPos(v))} rx={3} fill="#FF7A3D" opacity={0.7}/>:null)}
+          {/* Bars: CA */}
+          {monthlyCA.map((v,i)=>v>0?<rect key={`ca-${i}`} x={xPos(i)} y={yPos(v)} width={barW} height={Math.max(0,yPos(0)-yPos(v))} rx={3} fill={DS.accent} opacity={0.7}/>:null)}
+          {/* Line: cumul CA */}
+          <polyline fill="none" stroke={DS.accent} strokeWidth="2.5" strokeLinejoin="round" points={cumCA.map((v,i)=>`${xPos(i)},${yPos(v)}`).join(" ")}/>
+          {/* Line: cumul Charges */}
+          <polyline fill="none" stroke="#FF7A3D" strokeWidth="2.5" strokeLinejoin="round" strokeDasharray="6 3" points={cumCharges.map((v,i)=>`${xPos(i)},${yPos(v)}`).join(" ")}/>
+          {/* Line: net */}
+          <polyline fill="none" stroke="#1A1A1A" strokeWidth="1.5" strokeLinejoin="round" opacity="0.4" points={cumNet.map((v,i)=>`${xPos(i)},${yPos(Math.max(0,v))}`).join(" ")}/>
+          {/* X axis labels */}
+          {MONTHS_SHORT.map((m,i)=><text key={i} x={xPos(i)} y={chartH-6} textAnchor="middle" fontSize="9" fill={DS.textMid} fontFamily="Space Mono">{m}</text>)}
+        </svg>
+      </div>
+      <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:8,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"'Space Mono', monospace"}}><div style={{width:12,height:12,borderRadius:3,backgroundColor:DS.accent,opacity:0.7}}/> CA</div>
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"'Space Mono', monospace"}}><div style={{width:12,height:12,borderRadius:3,backgroundColor:"#FF7A3D",opacity:0.7}}/> Charges</div>
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"'Space Mono', monospace"}}><div style={{width:12,height:3,backgroundColor:DS.accent}}/> Cumulé CA</div>
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"'Space Mono', monospace"}}><div style={{width:12,height:3,backgroundColor:"#FF7A3D",borderTop:"2px dashed #FF7A3D",borderBottom:"none"}}/> Cumulé charges</div>
+      </div>
+    </BCard>
+
+    {/* Timeline / Table */}
+    <BCard style={{padding:0,overflow:"hidden"}}>
+      <div style={{padding:"14px 16px",borderBottom:DS.border2,display:"flex",alignItems:"center",gap:8}}>
+        <Calendar size={14} sw={2.5}/>
+        <span style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700}}>Échéances</span>
+      </div>
+      {sorted.map(item=>{
+        const overdue=!item.paid&&item.date<today;
+        const color=orgColors[item.organism]||DS.textMid;
+        return <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:`1px solid ${DS.textLight}20`,backgroundColor:item.paid?DS.accent+"08":"transparent",transition:"all 0.15s"}}>
+          {/* Checkbox */}
+          <div onClick={()=>setSchedule(prev=>prev.map(i=>i.id===item.id?{...i,paid:!i.paid}:i))} style={{width:22,height:22,borderRadius:6,border:`2.5px solid ${item.paid?DS.accent:overdue?"#FF6B57":DS.textLight}`,backgroundColor:item.paid?DS.accent:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
+            {item.paid&&<Check size={14} sw={3} color="white"/>}
+          </div>
+          {/* Info */}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
+              <span style={{fontSize:13,fontWeight:700,fontFamily:"'DM Sans', sans-serif",textDecoration:item.paid?"line-through":"none",color:item.paid?DS.textLight:DS.text}}>{item.label}</span>
+              <span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,backgroundColor:color+"25",color,fontFamily:"'Space Mono', monospace"}}>{item.organism}</span>
+              {overdue&&<span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,backgroundColor:"#FF6B5725",color:"#FF6B57",fontFamily:"'Space Mono', monospace"}}>EN RETARD</span>}
+            </div>
+            <div style={{fontSize:11,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{item.date.split("-").reverse().join("/")}</div>
+          </div>
+          {/* Amount */}
+          <div style={{fontFamily:"'Space Mono', monospace",fontWeight:700,fontSize:14,color:item.paid?DS.textLight:DS.text,flexShrink:0,textDecoration:item.paid?"line-through":"none"}}>{formatMoney(item.amount,"EUR")}</div>
+          {/* Edit/Delete */}
+          <div style={{display:"flex",gap:4,flexShrink:0}}>
+            <div onClick={()=>openEdit(item)} style={{cursor:"pointer",padding:4,borderRadius:4}}><Edit3 size={12} sw={2.5} color={DS.textLight}/></div>
+            <div onClick={()=>{if(confirm("Supprimer cette échéance ?"))setSchedule(prev=>prev.filter(i=>i.id!==item.id))}} style={{cursor:"pointer",padding:4,borderRadius:4}}><Trash2 size={12} sw={2.5} color={DS.textLight}/></div>
+          </div>
+        </div>;
+      })}
+      {!sorted.length&&<div style={{padding:40,textAlign:"center",fontSize:14,color:DS.textLight}}>Aucune échéance</div>}
+    </BCard>
+
+    {/* Add/Edit form modal */}
+    {showForm&&<div style={{position:"fixed",inset:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",backgroundColor:"rgba(26,26,26,0.4)",padding:16}}>
+      <BCard style={{width:"100%",maxWidth:420}}>
+        <div style={{padding:"16px 20px",borderBottom:DS.border2,fontFamily:"'Space Mono', monospace",fontSize:14,fontWeight:700}}>{editItem?"Modifier":"Ajouter une échéance"}</div>
+        <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
+          <div><Label>Organisme</Label><BSelect value={form.organism} onChange={e=>setForm(f=>({...f,organism:e.target.value}))}><option value="URSSAF">URSSAF</option><option value="IRCEC">IRCEC</option><option value="Impôts">Impôts</option><option value="Autre">Autre</option></BSelect></div>
+          <div><Label>Libellé</Label><BInput value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder="Ex: Échéance T2"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><Label>Date limite</Label><BInput type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></div>
+            <div><Label>Montant (€)</Label><BInput type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="2148"/></div>
+          </div>
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8,padding:"12px 20px",borderTop:DS.border2}}>
+          <BBtn small onClick={()=>setShowForm(false)}>Annuler</BBtn>
+          <BBtn small onClick={saveForm} color={DS.accent} style={{fontWeight:800}}>Enregistrer</BBtn>
+        </div>
+      </BCard>
+    </div>}
+  </div>;
+}
+
 /* ═══════════════════ MAIN APP ═══════════════════════════════ */
 function FreelanceBoard(){
   const[jobs,setJobs]=useState([]);const[entries,setEntries]=useState([]);const[settings,setSettings]=useState({defaultCurrency:"EUR",defaultDailyRate:350,apiUrl:""});
+  const DEFAULT_SCHEDULE=[];
+  const[schedule,setSchedule]=useState(()=>storage.load("schedule",DEFAULT_SCHEDULE));
   const[rates,setRates]=useState(FALLBACK_RATES);const[loaded,setLoaded]=useState(false);
   const[view,setView]=useState("calendar");const[calendarMode,setCalendarMode]=useState("month");
   const[currentMonth,setCurrentMonth]=useState(new Date().getMonth());const[currentYear,setCurrentYear]=useState(new Date().getFullYear());
@@ -742,7 +931,7 @@ function FreelanceBoard(){
   const isPulling=useRef(false); // Guard: empêche l'auto-push pendant un pull
 
   /* ─── AUTO-PUSH (debounced 2s after any data change) ─── */
-  const autoPush=useCallback((currentJobs,currentEntries,currentSettings)=>{
+  const autoPush=useCallback((currentJobs,currentEntries,currentSettings,currentSchedule)=>{
     // Ne PAS push si on est en train de pull (sinon on ré-écrit les données corrompues/partielles)
     if(isPulling.current)return;
     if(pushTimerRef.current)clearTimeout(pushTimerRef.current);
@@ -751,7 +940,7 @@ function FreelanceBoard(){
       setSyncStatus("syncing");setSyncMsg("Sync auto...");
       try{
         const settingsToSync={...currentSettings};delete settingsToSync.apiUrl;
-        await syncApi.push({jobs:currentJobs,entries:currentEntries,settings:settingsToSync});
+        await syncApi.push({jobs:currentJobs,entries:currentEntries,settings:settingsToSync,schedule:currentSchedule});
         const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
         setSyncStatus("success");setSyncMsg("Synchronisé");
         setTimeout(()=>setSyncStatus(s=>s==="success"?"idle":s),2500);
@@ -778,7 +967,7 @@ function FreelanceBoard(){
         if(res.success&&res.data){
           const d=res.data;
           // Les données sont normalisées par syncApi.pull()
-          const sheetHasData=(d.jobs&&d.jobs.length>0)||(d.entries&&d.entries.length>0);
+          const sheetHasData=(d.jobs&&d.jobs.length>0)||(d.entries&&d.entries.length>0)||(d.schedule&&d.schedule.length>0);
           if(sheetHasData){
             if(d.jobs&&d.jobs.length>0){setJobs(d.jobs);storage.save("jobs",d.jobs)}
             if(d.entries){setEntries(d.entries);storage.save("entries",d.entries)}
@@ -786,11 +975,16 @@ function FreelanceBoard(){
               const merged={...localSettings,...d.settings,apiUrl:localSettings.apiUrl};
               setSettings(merged);storage.save("settings",merged);
             }
+            if(d.schedule&&d.schedule.length>0){
+              const ns=d.schedule.map(i=>({...i,amount:parseFloat(i.amount)||0,paid:i.paid==="true"||i.paid===true}));
+              setSchedule(ns);storage.save("schedule",ns);
+            }
             console.log("FreelanceBoard: données récupérées depuis Google Sheets ("+d.jobs.length+" jobs, "+d.entries.length+" entries)");
           }else if(localJobs.length>0){
             // Sheet vide mais local a des données → push initial
             const settingsToSync={...localSettings};delete settingsToSync.apiUrl;
-            await syncApi.push({jobs:localJobs,entries:localEntries,settings:settingsToSync});
+            const localSchedule=storage.load("schedule",[]);
+            await syncApi.push({jobs:localJobs,entries:localEntries,settings:settingsToSync,schedule:localSchedule});
             console.log("FreelanceBoard: données locales envoyées vers Google Sheets");
           }
           const now=new Date().toISOString();setLastSync(now);storage.save("lastSync",now);
@@ -805,9 +999,10 @@ function FreelanceBoard(){
   },[]);
 
   /* ─── AUTO-PUSH on data changes (after initial load) ─── */
-  useEffect(()=>{if(loaded){storage.save("jobs",jobs);if(initialLoadDone.current)autoPush(jobs,entries,settings)}},[jobs]);
-  useEffect(()=>{if(loaded){storage.save("entries",entries);if(initialLoadDone.current)autoPush(jobs,entries,settings)}},[entries]);
-  useEffect(()=>{if(loaded){storage.save("settings",settings);if(initialLoadDone.current)autoPush(jobs,entries,settings)}},[settings]);
+  useEffect(()=>{if(loaded){storage.save("jobs",jobs);if(initialLoadDone.current)autoPush(jobs,entries,settings,schedule)}},[jobs]);
+  useEffect(()=>{if(loaded){storage.save("entries",entries);if(initialLoadDone.current)autoPush(jobs,entries,settings,schedule)}},[entries]);
+  useEffect(()=>{if(loaded){storage.save("settings",settings);if(initialLoadDone.current)autoPush(jobs,entries,settings,schedule)}},[settings]);
+  useEffect(()=>{if(loaded){storage.save("schedule",schedule);if(initialLoadDone.current)autoPush(jobs,entries,settings,schedule)}},[schedule]);
   useEffect(()=>{(async()=>{try{const r=await fetch("https://api.frankfurter.app/latest?from=EUR");const d=await r.json();if(d.rates){const inv={};Object.entries(d.rates).forEach(([k,v])=>{inv[k]=1/v});inv.EUR=1;setRates(inv)}}catch{}})()},[]);
 
   const clients=useMemo(()=>[...new Set(jobs.map(j=>j.client).filter(Boolean))],[jobs]);
@@ -815,7 +1010,7 @@ function FreelanceBoard(){
   const deleteJob=(id)=>{setJobs(p=>p.filter(j=>j.id!==id));setEntries(p=>p.filter(e=>e.jobId!==id));setShowJobForm(false);setEditingJob(null)};
   const duplicateJob=(job)=>{setJobs(p=>[...p,{...job,id:uid(),name:`${job.name} (copie)`,status:"prospect",createdAt:new Date().toISOString()}])};
   const toggleDay=(date,jobId,period)=>{setEntries(prev=>{const ex=prev.filter(e=>e.date===date);if(period==="full"){const hf=ex.find(e=>e.jobId===jobId&&e.period==="full");if(hf)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));return[...prev.filter(e=>e.date!==date),{date,jobId,period:"full",note:""}]}const hh=ex.find(e=>e.jobId===jobId&&e.period===period);if(hh)return prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period===period));let next=prev.filter(e=>!(e.date===date&&e.jobId===jobId&&e.period==="full"));next=next.filter(e=>!(e.date===date&&e.period===period));return[...next,{date,jobId,period,note:""}]})};
-  const NAV=[{key:"calendar",label:"Calendrier",icon:Calendar},{key:"jobs",label:"Jobs",icon:Briefcase},{key:"summary",label:"Résumé",icon:BarChart3},{key:"settings",label:"Réglages",icon:Settings}];
+  const NAV=[{key:"calendar",label:"Calendrier",icon:Calendar},{key:"jobs",label:"Jobs",icon:Briefcase},{key:"summary",label:"Résumé",icon:BarChart3},{key:"echeancier",label:"Échéancier",icon:Wallet},{key:"settings",label:"Réglages",icon:Settings}];
 
   if(!loaded)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",backgroundColor:DS.bg,fontFamily:"'Space Mono', monospace"}}><BCard style={{padding:40,textAlign:"center"}}><div style={{marginBottom:12,display:"flex",justifyContent:"center"}}><RefreshCw size={40} sw={2} style={{animation:"spin 1s linear infinite"}}/></div><div style={{fontSize:14,fontWeight:700}}>Chargement...</div></BCard></div>;
 
@@ -894,6 +1089,7 @@ function FreelanceBoard(){
         </div>}
         {view==="jobs"&&<JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true)}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true)}}/>}
         {view==="summary"&&<SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
+        {view==="echeancier"&&<EcheancierView schedule={schedule} setSchedule={setSchedule} jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
         {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)} syncStatus={syncStatus} syncMsg={syncMsg} lastSync={lastSync}/>}
       </div>
     </div>

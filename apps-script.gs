@@ -13,7 +13,7 @@
    
    ═══════════════════════════════════════════════════════════════ */
 
-var SHEET_NAMES = { jobs: "Jobs", calendar: "Calendar", settings: "Settings" };
+var SHEET_NAMES = { jobs: "Jobs", calendar: "Calendar", settings: "Settings", schedule: "Schedule" };
 
 var JOBS_HEADERS = [
   "id", "name", "client", "contact", "type", "dailyRate",
@@ -22,8 +22,9 @@ var JOBS_HEADERS = [
 ];
 var CALENDAR_HEADERS = ["date", "jobId", "period", "note"];
 var SETTINGS_HEADERS = ["key", "value"];
+var SCHEDULE_HEADERS = ["id", "organism", "label", "date", "amount", "paid"];
 
-var NUMERIC_FIELDS = ["dailyRate", "fixedAmount"];
+var NUMERIC_FIELDS = ["dailyRate", "fixedAmount", "amount"];
 
 // ─── HELPERS ─────────────────────────────────────────────────
 
@@ -178,7 +179,8 @@ function doGet(e) {
         data: {
           jobs: sheetToArray(SHEET_NAMES.jobs, JOBS_HEADERS),
           entries: sheetToArray(SHEET_NAMES.calendar, CALENDAR_HEADERS),
-          settings: readSettings()
+          settings: readSettings(),
+          schedule: sheetToArray(SHEET_NAMES.schedule, SCHEDULE_HEADERS)
         },
         timestamp: new Date().toISOString()
       });
@@ -210,6 +212,8 @@ function doPost(e) {
         arrayToSheet(SHEET_NAMES.jobs, JOBS_HEADERS, body.jobs);
       if (body.entries !== undefined)
         arrayToSheet(SHEET_NAMES.calendar, CALENDAR_HEADERS, body.entries);
+      if (body.schedule !== undefined)
+        arrayToSheet(SHEET_NAMES.schedule, SCHEDULE_HEADERS, body.schedule);
       if (body.settings !== undefined)
         writeSettings(body.settings);
 
@@ -232,6 +236,7 @@ function initSheet() {
   getOrCreateSheet(SHEET_NAMES.jobs, JOBS_HEADERS);
   getOrCreateSheet(SHEET_NAMES.calendar, CALENDAR_HEADERS);
   getOrCreateSheet(SHEET_NAMES.settings, SETTINGS_HEADERS);
+  getOrCreateSheet(SHEET_NAMES.schedule, SCHEDULE_HEADERS);
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var jobsSheet = ss.getSheetByName(SHEET_NAMES.jobs);
