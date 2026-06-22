@@ -1,4 +1,4 @@
-const CACHE = "fb-v2";
+const CACHE = "fb-v3"; // ← version bumped pour vider l'ancien cache corrompu
 const SHELL = ["./"];
 
 self.addEventListener("install", e => {
@@ -15,9 +15,16 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
-  // Ne pas cacher les appels API
-  if (e.request.url.includes("script.google.com")) return;
-  if (e.request.url.includes("frankfurter")) return;
+
+  const url = e.request.url;
+
+  // Ne jamais cacher : APIs externes, CDN scripts, extensions Chrome
+  if (url.includes("script.google.com")) return;
+  if (url.includes("frankfurter")) return;
+  if (url.includes("unpkg.com")) return;          // ← React / Babel CDN
+  if (url.includes("fonts.googleapis.com")) return; // ← Google Fonts
+  if (url.includes("fonts.gstatic.com")) return;
+  if (url.startsWith("chrome-extension")) return;  // ← évite l'erreur put()
 
   e.respondWith(
     fetch(e.request)
