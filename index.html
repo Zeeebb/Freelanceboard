@@ -584,8 +584,113 @@ function JobsList({jobs,entries,rates,onEdit,onDuplicate,onAdd}){
   </div>;
 }
 
+/* ─── NET ANNUEL (calcul temps réel) ───────────────────────── */
+const todayStr=()=>{const n=new Date();return formatDate(n.getFullYear(),n.getMonth(),n.getDate())};
+const AUTO_ORGS=["URSSAF","IRCEC","Impôts"]; // organismes à prélèvement automatique
+const REALIZED_STATUSES=["done","invoiced","paid"];
+
+function computeNet({jobs,entries,schedule,rates,year}){
+  const yp=String(year),today=todayStr();
+  const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
+  let caReal=0,caActive=0,caActiveToDate=0,caConfirmed=0;
+  jobs.forEach(j=>{
+    if(j.status==="prospect")return;
+    const es=entries.filter(e=>e.jobId===j.id&&e.date&&e.date.startsWith(yp));
+    const val=(e)=>e.period==="full"?1:0.5;
+    const days=es.reduce((s,e)=>s+val(e),0);
+    const daysTD=es.filter(e=>e.date<=today).reduce((s,e)=>s+val(e),0);
+    let amt=0,amtTD=0;
+    if(j.type==="daily"){amt=j.dailyRate*days;amtTD=j.dailyRate*daysTD}
+    else{
+      const inYear=j.startDate?.startsWith(yp)||j.endDate?.startsWith(yp)||(!j.startDate&&!j.endDate);
+      amt=inYear?j.fixedAmount:0;
+    }
+    amt=te(amt,j.currency);amtTD=te(amtTD,j.currency);
+    if(REALIZED_STATUSES.includes(j.status))caReal+=amt;
+    else if(j.status==="active"){caActive+=amt;caActiveToDate+=amtTD}
+    else if(j.status==="confirmed")caConfirmed+=amt;
+  });
+  const caAcquis=caReal+caActiveToDate;           // ce qui est déjà gagné à date
+  const caSecurise=caReal+caActive+caConfirmed;   // projection fin d'année (sans prospects)
+
+  const byOrg={};let chargesTotal=0,chargesPaid=0;
+  const items=schedule.filter(i=>i.date&&i.date.startsWith(yp));
+  items.forEach(i=>{
+    const o=i.organism||"Autre";
+    if(!byOrg[o])byOrg[o]={total:0,paid:0};
+    byOrg[o].total+=i.amount;chargesTotal+=i.amount;
+    if(i.paid){byOrg[o].paid+=i.amount;chargesPaid+=i.amount}
+  });
+  const order=["URSSAF","IRCEC","Impôts"];
+  const orgs=[...order.filter(o=>byOrg[o]),...Object.keys(byOrg).filter(o=>!order.includes(o))];
+  const taxTotal=byOrg["Impôts"]?.total||0;
+  // doublons potentiels (même organisme + date + montant)
+  const seen={};let dupes=0;
+  items.forEach(i=>{const k=`${i.organism}|${i.date}|${i.amount}`;seen[k]=(seen[k]||0)+1;if(seen[k]>1)dupes++});
+  return{caAcquis,caSecurise,caReal,byOrg,orgs,chargesTotal,chargesPaid,
+    netToDate:caAcquis-chargesPaid,
+    netProjected:caSecurise-chargesTotal,
+    netBeforeTax:caSecurise-(chargesTotal-taxTotal),
+    chargeRate:caSecurise>0?chargesTotal/caSecurise:0,
+    dupes};
+}
+
+function NetCard({jobs,entries,schedule,rates,year}){
+  const n=computeNet({jobs,entries,schedule,rates,year});
+  const col=(v)=>v<0?DS.red:DS.text;
+  const now=new Date();
+  const hhmm=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  const lbl={fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.textMid};
+  const mono={fontFamily:"'Space Mono', monospace"};
+  return <BCard style={{padding:18,marginBottom:16,borderLeft:`6px solid ${DS.accent}`,background:`linear-gradient(135deg,${DS.accent}18 0%,${DS.card} 60%)`}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      <Wallet size={16} sw={2.5}/>
+      <span style={{...lbl,fontSize:11}}>Net annuel {year}</span>
+      <span style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,fontSize:10,color:DS.textLight,...mono}}>
+        <span style={{width:7,height:7,borderRadius:"50%",backgroundColor:DS.accentDk,display:"inline-block"}}/>Temps réel · {hhmm}
+      </span>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12,marginBottom:14}}>
+      <div>
+        <div style={lbl}>Net projeté fin d'année</div>
+        <div style={{...mono,fontSize:28,fontWeight:700,color:col(n.netProjected)}}>{formatMoney(n.netProjected,"EUR")}</div>
+        <div style={{fontSize:11,color:DS.textLight}}>CA sécurisé − toutes les charges {year} · ≈ {formatMoney(n.netProjected/12,"EUR")}/mois</div>
+      </div>
+      <div>
+        <div style={lbl}>Net à date</div>
+        <div style={{...mono,fontSize:28,fontWeight:700,color:col(n.netToDate)}}>{formatMoney(n.netToDate,"EUR")}</div>
+        <div style={{fontSize:11,color:DS.textLight}}>CA déjà acquis − charges déjà prélevées</div>
+      </div>
+    </div>
+    <div style={{border:"1.5px solid #1A1A1A",borderRadius:8,overflow:"hidden",backgroundColor:DS.card}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:"6px 16px",padding:"8px 12px",backgroundColor:DS.bgLight,...lbl,fontSize:9}}>
+        <span/><span style={{textAlign:"right"}}>Prélevé</span><span style={{textAlign:"right"}}>Total {year}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:"6px 16px",padding:"8px 12px",fontSize:12,alignItems:"center"}}>
+        <span style={{fontWeight:700}}>CA</span>
+        <span style={{...mono,textAlign:"right"}}>{formatMoney(n.caAcquis,"EUR")}</span>
+        <span style={{...mono,textAlign:"right"}}>{formatMoney(n.caSecurise,"EUR")}</span>
+        {n.orgs.map(o=><React.Fragment key={o}>
+          <span style={{color:DS.textMid}}>− {o}</span>
+          <span style={{...mono,textAlign:"right",color:DS.textMid}}>{formatMoney(n.byOrg[o].paid,"EUR")}</span>
+          <span style={{...mono,textAlign:"right",color:DS.textMid}}>{formatMoney(n.byOrg[o].total,"EUR")}</span>
+        </React.Fragment>)}
+        <span style={{fontWeight:800,borderTop:"1.5px dashed #9B8E7E",paddingTop:6}}>= Net</span>
+        <span style={{...mono,textAlign:"right",fontWeight:800,borderTop:"1.5px dashed #9B8E7E",paddingTop:6,color:col(n.netToDate)}}>{formatMoney(n.netToDate,"EUR")}</span>
+        <span style={{...mono,textAlign:"right",fontWeight:800,borderTop:"1.5px dashed #9B8E7E",paddingTop:6,color:col(n.netProjected)}}>{formatMoney(n.netProjected,"EUR")}</span>
+      </div>
+    </div>
+    <div style={{fontSize:11,color:DS.textLight,marginTop:10,lineHeight:1.5}}>
+      Net avant impôt sur le revenu : <b style={{color:DS.text}}>{formatMoney(n.netBeforeTax,"EUR")}</b> · Charges = {Math.round(n.chargeRate*100)}% du CA sécurisé. Prospects exclus.
+    </div>
+    {n.dupes>0&&<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,fontSize:11,backgroundColor:DS.yellow+"30",border:`1.5px solid ${DS.yellow}`}}>
+      ⚠ {n.dupes} échéance{n.dupes>1?"s":""} en doublon possible dans l'échéancier (même organisme, date et montant). Vérifiez-les : elles sont comptées deux fois dans le net.
+    </div>}
+  </BCard>;
+}
+
 /* ─── SUMMARY ──────────────────────────────────────────────── */
-function SummaryView({jobs,entries,rates,year}){
+function SummaryView({jobs,entries,rates,year,schedule}){
   const[period,setPeriod]=useState("year");const[periodMonth,setPeriodMonth]=useState(new Date().getMonth());
   const cd=(id,df)=>{let f=entries.filter(e=>e.jobId===id);if(df)f=f.filter(df);return f.reduce((s,e)=>s+(e.period==="full"?1:0.5),0)};
   const te=(a,c)=>c==="EUR"?a:a*(rates[c]||FALLBACK_RATES[c]||1);
@@ -604,6 +709,7 @@ function SummaryView({jobs,entries,rates,year}){
       {["month","year"].map(p=><BBtn key={p} small onClick={()=>setPeriod(p)} color={period===p?DS.accent:DS.card} style={{fontSize:11}}>{p==="month"?"Mois":"Année"}</BBtn>)}
       {period==="month"&&<BSelect value={periodMonth} onChange={e=>setPeriodMonth(Number(e.target.value))} style={{width:"auto",padding:"6px 30px 6px 10px",fontSize:12}}>{MONTHS_FR.map((m,i)=><option key={i} value={i}>{m}</option>)}</BSelect>}
     </div>}>Résumé</SectionTitle>
+    <NetCard jobs={jobs} entries={entries} schedule={schedule||[]} rates={rates} year={year}/>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10,marginBottom:12}}>
       <BCard style={{padding:18,borderLeft:`6px solid ${DS.accent}`,background:`linear-gradient(135deg,${DS.accent}15 0%,${DS.card} 100%)`}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><DollarSign size={16} sw={2.5}/><span style={{fontFamily:"'Space Mono', monospace",fontSize:10,fontWeight:800,textTransform:"uppercase",color:DS.accentDk}}>CA Réalisé</span></div>
@@ -668,7 +774,7 @@ function SummaryView({jobs,entries,rates,year}){
 }
 
 /* ─── SETTINGS ─────────────────────────────────────────────── */
-function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync}){
+function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync,onExport}){
   const[form,setForm]=useState(settings);const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const fmtDate=(iso)=>{if(!iso)return"Jamais";try{const d=new Date(iso);return d.toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}catch{return"Jamais"}};
   return <div style={{maxWidth:480}}>
@@ -678,6 +784,22 @@ function SettingsView({settings,onSave,syncStatus,syncMsg,lastSync}){
         <div><Label>Devise par défaut</Label><BSelect value={form.defaultCurrency} onChange={e=>set("defaultCurrency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</BSelect></div>
         <div><Label>Tarif journalier par défaut</Label><BInput type="number" value={form.defaultDailyRate} onChange={e=>set("defaultDailyRate",e.target.value)} placeholder="350"/></div>
       </div>
+    </BCard>
+
+    <BCard style={{padding:20,marginBottom:14}}>
+      <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:10}}>Prélèvements automatiques</div>
+      <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+        <input type="checkbox" checked={form.autoDebit!==false} onChange={e=>set("autoDebit",e.target.checked)} style={{width:18,height:18,marginTop:2,accentColor:DS.accentDk}}/>
+        <span style={{fontSize:12,color:DS.textMid,lineHeight:1.5}}>
+          Valider automatiquement les échéances <b>URSSAF, IRCEC et Impôts</b> le lendemain de leur date de prélèvement. Si un prélèvement est rejeté, décochez-le dans l'Échéancier : il ne sera plus re-validé automatiquement. Les échéances « Autre » restent manuelles.
+        </span>
+      </label>
+    </BCard>
+
+    <BCard style={{padding:20,marginBottom:14}}>
+      <div style={{fontFamily:"'Space Mono', monospace",fontSize:12,fontWeight:700,marginBottom:10}}>Sauvegarde</div>
+      <div style={{fontSize:12,color:DS.textMid,marginBottom:12,lineHeight:1.5}}>Télécharge une copie complète de vos jobs, jours, échéances et réglages (fichier JSON).</div>
+      <BBtn small onClick={onExport}>Télécharger une sauvegarde</BBtn>
     </BCard>
 
     {/* Sync status */}
@@ -726,7 +848,7 @@ function NavBtn({item,active,collapsed,onClick,mobile}){
 }
 
 /* ─── ECHEANCIER VIEW ──────────────────────────────────────── */
-function EcheancierView({schedule,setSchedule,jobs,entries,rates,year}){
+function EcheancierView({schedule,setSchedule,jobs,entries,rates,year,onTogglePaid,autoValidated}){
   const[showForm,setShowForm]=useState(false);
   const[editItem,setEditItem]=useState(null);
 
@@ -800,6 +922,8 @@ function EcheancierView({schedule,setSchedule,jobs,entries,rates,year}){
   return <div>
     <SectionTitle icon={Wallet} right={<BBtn onClick={openAdd} color={DS.accent} style={{fontSize:13}}><span style={{display:"flex",alignItems:"center",gap:6}}><Plus size={16}/> Ajouter</span></BBtn>}>Échéancier {year}</SectionTitle>
 
+    <NetCard jobs={jobs} entries={entries} schedule={schedule} rates={rates} year={year}/>
+
     {/* Summary cards */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:16}}>
       <BCard style={{padding:16,borderLeft:`6px solid #FF7A3D`}}>
@@ -866,7 +990,7 @@ function EcheancierView({schedule,setSchedule,jobs,entries,rates,year}){
         const color=orgColors[item.organism]||DS.textMid;
         return <div key={item.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:`1px solid ${DS.textLight}20`,backgroundColor:item.paid?DS.accent+"08":"transparent",transition:"all 0.15s"}}>
           {/* Checkbox */}
-          <div onClick={()=>setSchedule(prev=>prev.map(i=>i.id===item.id?{...i,paid:!i.paid}:i))} style={{width:22,height:22,borderRadius:6,border:`2.5px solid ${item.paid?DS.accent:overdue?"#FF6B57":DS.textLight}`,backgroundColor:item.paid?DS.accent:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
+          <div onClick={()=>onTogglePaid(item)} style={{width:22,height:22,borderRadius:6,border:`2.5px solid ${item.paid?DS.accent:overdue?"#FF6B57":DS.textLight}`,backgroundColor:item.paid?DS.accent:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.15s"}}>
             {item.paid&&<Check size={14} sw={3} color="white"/>}
           </div>
           {/* Info */}
@@ -874,6 +998,7 @@ function EcheancierView({schedule,setSchedule,jobs,entries,rates,year}){
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
               <span style={{fontSize:13,fontWeight:700,fontFamily:"'DM Sans', sans-serif",textDecoration:item.paid?"line-through":"none",color:item.paid?DS.textLight:DS.text}}>{item.label}</span>
               <span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,backgroundColor:color+"25",color,fontFamily:"'Space Mono', monospace"}}>{item.organism}</span>
+              {item.paid&&autoValidated.has(item.id)&&<span title="Prélèvement validé automatiquement" style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,backgroundColor:DS.accent+"40",color:DS.accentDk,fontFamily:"'Space Mono', monospace"}}>AUTO ✓</span>}
               {overdue&&<span style={{fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:4,backgroundColor:"#FF6B5725",color:"#FF6B57",fontFamily:"'Space Mono', monospace"}}>EN RETARD</span>}
             </div>
             <div style={{fontSize:11,color:DS.textLight,fontFamily:"'Space Mono', monospace"}}>{item.date.split("-").reverse().join("/")}</div>
@@ -929,6 +1054,54 @@ function FreelanceBoard(){
   const pushTimerRef=useRef(null);
   const initialLoadDone=useRef(false);
   const isPulling=useRef(false); // Guard: empêche l'auto-push pendant un pull
+  const[syncReady,setSyncReady]=useState(false);
+  const[tick,setTick]=useState(0);            // relance les calculs "temps réel" (heure, retour sur l'onglet)
+  const[autoNotice,setAutoNotice]=useState(null);
+  const autoState=settings.scheduleAuto||{};
+  const autoValidated=useMemo(()=>new Set(autoState.validated||[]),[settings.scheduleAuto]);
+
+  useEffect(()=>{
+    const t=setInterval(()=>setTick(x=>x+1),60*1000);
+    const onVis=()=>{if(!document.hidden)setTick(x=>x+1)};
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{clearInterval(t);document.removeEventListener("visibilitychange",onVis)};
+  },[]);
+
+  /* ─── VALIDATION AUTO DES PRÉLÈVEMENTS ───────────────
+     Une échéance URSSAF / IRCEC / Impôts non payée dont la date est passée
+     (veille ou avant) est cochée "payée" automatiquement, sauf si l'utilisateur
+     l'a explicitement décochée (liste "exempt"). Rien n'est jamais supprimé. */
+  useEffect(()=>{
+    if(!syncReady||settings.autoDebit===false)return;
+    const exempt=new Set(autoState.exempt||[]);
+    const today=todayStr();
+    const due=schedule.filter(i=>!i.paid&&AUTO_ORGS.includes(i.organism)&&i.date&&i.date<today&&!exempt.has(i.id));
+    if(!due.length)return;
+    const ids=new Set(due.map(i=>i.id));
+    setSchedule(prev=>prev.map(i=>ids.has(i.id)?{...i,paid:true}:i));
+    setSettings(prev=>{const a=prev.scheduleAuto||{};return{...prev,scheduleAuto:{validated:[...new Set([...(a.validated||[]),...ids])],exempt:a.exempt||[]}}});
+    setAutoNotice({count:due.length,total:due.reduce((s,i)=>s+i.amount,0)});
+  },[schedule,settings.autoDebit,settings.scheduleAuto,syncReady,tick]);
+
+  const togglePaid=(item)=>{
+    const willBePaid=!item.paid;
+    setSchedule(prev=>prev.map(i=>i.id===item.id?{...i,paid:willBePaid}:i));
+    setSettings(prev=>{
+      const a=prev.scheduleAuto||{};
+      let validated=(a.validated||[]).filter(id=>id!==item.id);   // action manuelle → n'est plus "auto"
+      let exempt=(a.exempt||[]).filter(id=>id!==item.id);
+      if(!willBePaid)exempt.push(item.id);                         // décoché à la main → pas de re-validation auto
+      return{...prev,scheduleAuto:{validated,exempt}};
+    });
+  };
+
+  const exportBackup=()=>{
+    const backup={exportedAt:new Date().toISOString(),jobs,entries,schedule,settings:{...settings,apiUrl:undefined}};
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download=`freelanceboard-backup-${todayStr()}.json`;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  };
 
   /* ─── AUTO-PUSH (debounced 2s after any data change) ─── */
   const autoPush=useCallback((currentJobs,currentEntries,currentSettings,currentSchedule)=>{
@@ -976,7 +1149,7 @@ function FreelanceBoard(){
               setSettings(merged);storage.save("settings",merged);
             }
             if(d.schedule&&d.schedule.length>0){
-              const ns=d.schedule.map(i=>({...i,amount:parseFloat(i.amount)||0,paid:i.paid==="true"||i.paid===true}));
+              const ns=d.schedule.map(i=>({...i,date:normDate(i.date),amount:parseFloat(i.amount)||0,paid:i.paid==="true"||i.paid===true}));
               setSchedule(ns);storage.save("schedule",ns);
             }
             console.log("FreelanceBoard: données récupérées depuis Google Sheets ("+d.jobs.length+" jobs, "+d.entries.length+" entries)");
@@ -994,6 +1167,7 @@ function FreelanceBoard(){
       setTimeout(()=>{
         initialLoadDone.current=true;
         isPulling.current=false;
+        setSyncReady(true); // la validation auto ne démarre qu'une fois les données du Sheet chargées
       },2000);
     })();
   },[]);
@@ -1042,6 +1216,9 @@ function FreelanceBoard(){
     <div style={{flex:1,overflowY:"auto"}}>
       <div className="mnv" style={{display:"none",height:52}}/>
       <div style={{maxWidth:840,margin:"0 auto",padding:"24px 16px"}}>
+        {autoNotice&&<div onClick={()=>setAutoNotice(null)} style={{cursor:"pointer",marginBottom:14,padding:"10px 14px",borderRadius:10,border:DS.border2,backgroundColor:DS.accent+"40",boxShadow:DS.shadowSm,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+          <Check size={14} sw={3}/> {autoNotice.count} prélèvement{autoNotice.count>1?"s":""} validé{autoNotice.count>1?"s":""} automatiquement ({formatMoney(autoNotice.total,"EUR")}) — voir l'Échéancier. <span style={{marginLeft:"auto",color:DS.textMid}}>✕</span>
+        </div>}
         {view==="calendar"&&<div>
           <SectionTitle icon={Calendar} right={<div style={{display:"flex",gap:6,alignItems:"center"}}>
             {["month","year"].map(m=><BBtn key={m} small onClick={()=>setCalendarMode(m)} color={calendarMode===m?DS.accent:DS.card} style={{fontSize:11}}>{m==="month"?"Mois":"Année"}</BBtn>)}
@@ -1088,9 +1265,9 @@ function FreelanceBoard(){
           </div>}
         </div>}
         {view==="jobs"&&<JobsList jobs={jobs} entries={entries} rates={rates} onEdit={(j)=>{setEditingJob(j);setShowJobForm(true)}} onDuplicate={duplicateJob} onAdd={()=>{setEditingJob(null);setShowJobForm(true)}}/>}
-        {view==="summary"&&<SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
-        {view==="echeancier"&&<EcheancierView schedule={schedule} setSchedule={setSchedule} jobs={jobs} entries={entries} rates={rates} year={currentYear}/>}
-        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(s)} syncStatus={syncStatus} syncMsg={syncMsg} lastSync={lastSync}/>}
+        {view==="summary"&&<SummaryView jobs={jobs} entries={entries} rates={rates} year={currentYear} schedule={schedule}/>}
+        {view==="echeancier"&&<EcheancierView schedule={schedule} setSchedule={setSchedule} jobs={jobs} entries={entries} rates={rates} year={currentYear} onTogglePaid={togglePaid} autoValidated={autoValidated}/>}
+        {view==="settings"&&<SettingsView settings={settings} onSave={(s)=>setSettings(prev=>({...prev,...s,scheduleAuto:prev.scheduleAuto}))} syncStatus={syncStatus} syncMsg={syncMsg} lastSync={lastSync} onExport={exportBackup}/>}
       </div>
     </div>
 

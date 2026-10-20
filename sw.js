@@ -1,4 +1,4 @@
-const CACHE = "fb-v3"; // ← version bumped pour vider l'ancien cache corrompu
+const CACHE = "fb-v4"; // v4 : validation auto des prélèvements + net annuel
 const SHELL = ["./"];
 
 self.addEventListener("install", e => {
