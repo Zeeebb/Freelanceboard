@@ -662,6 +662,16 @@ function NetCard({jobs,entries,schedule,rates,year}){
         <div style={{fontSize:11,color:DS.textLight}}>CA déjà acquis − charges déjà prélevées</div>
       </div>
     </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+      {[["URSSAF","#5EBCF1"],["Impôts","#FFD23F"],["IRCEC","#C49BFF"]].map(([o,c])=>{
+        const v=n.byOrg[o]||{total:0,paid:0};
+        return <div key={o} style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid #1A1A1A",borderLeft:`6px solid ${c}`,backgroundColor:DS.card}}>
+          <div style={lbl}>{o==="Impôts"?"Impôts (IR)":o} {year}</div>
+          <div style={{...mono,fontSize:18,fontWeight:700}}>{formatMoney(v.total,"EUR")}</div>
+          <div style={{fontSize:11,color:DS.textLight}}>payé {formatMoney(v.paid,"EUR")} · reste {formatMoney(v.total-v.paid,"EUR")}</div>
+        </div>;
+      })}
+    </div>
     <div style={{border:"1.5px solid #1A1A1A",borderRadius:8,overflow:"hidden",backgroundColor:DS.card}}>
       <div style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:"6px 16px",padding:"8px 12px",backgroundColor:DS.bgLight,...lbl,fontSize:9}}>
         <span/><span style={{textAlign:"right"}}>Prélevé</span><span style={{textAlign:"right"}}>Total {year}</span>
